@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Penguin Invaders</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(135deg, #0a0a2e 0%, #1a1a4e 50%, #0a0a2e 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+  }
+  .game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 {
+    color: #ffaa00;
+    font-size: 36px;
+    text-shadow: 0 0 20px rgba(255,170,0,0.5), 0 2px 4px rgba(0,0,0,0.5);
+    margin-bottom: 10px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+  canvas {
+    border: 3px solid #334;
+    border-radius: 8px;
+    box-shadow: 0 0 30px rgba(0,100,255,0.3), inset 0 0 30px rgba(0,0,0,0.3);
+    display: block;
+  }
+  .instructions {
+    color: #8899aa;
+    font-size: 14px;
+    margin-top: 12px;
+    letter-spacing: 2px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    align-items: center;
+  }
+  .btn {
+    background: #1a1a4e;
+    color: #8899cc;
+    border: 1px solid #334;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .btn:hover {
+    background: #2a2a6e;
+    color: #aabbee;
+    border-color: #556;
+    box-shadow: 0 0 12px rgba(0,100,255,0.3);
+  }
+  .btn:active {
+    transform: scale(0.96);
+  }
+  .btn.active {
+    background: #ffaa00;
+    color: #0a0a2e;
+    border-color: #ffaa00;
+    box-shadow: 0 0 15px rgba(255,170,0,0.4);
+  }
+  .btn.fullscreen-btn {
+    background: transparent;
+    border-color: #445;
+    font-size: 16px;
+    padding: 6px 10px;
+  }
+  .btn.fullscreen-btn:hover {
+    background: #1a1a4e;
+  }
+
+  /* ─── Fullscreen ──────────────────────────────── */
+  .game-container:fullscreen {
+    width: 100vw; height: 100vh;
+    background: #080820;
+    justify-content: center;
+    padding: 0;
+  }
+  .game-container:fullscreen canvas {
+    max-width: 100vw; max-height: 100vh;
+    width: auto; height: auto;
+    object-fit: contain;
+  }
+  .game-container:fullscreen .controls,
+  .game-container:fullscreen .instructions,
+  .game-container:fullscreen h1 {
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="game-container">
+  <h1>🐧 Penguin Invaders</h1>
+  <canvas id="gameCanvas" width="800" height="600" tabindex="0"></canvas>
+  <p class="instructions">Arrow Keys to Move &nbsp;|&nbsp; Space to Shoot &nbsp;|&nbsp; A/D also works</p>
+  <div class="controls">
+    <button class="btn" data-diff="easy" id="diffEasy">Easy</button>
+    <button class="btn active" data-diff="medium" id="diffMedium">Medium</button>
+    <button class="btn" data-diff="hard" id="diffHard">Hard</button>
+    <button class="btn fullscreen-btn" id="fullscreenBtn">⛶ Fullscreen</button>
+  </div>
+</div>
+<script>
+"use strict";
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = 800, H = 600;
+
+// ─── Key State ───────────────────────────────────────────────
+const keys = { left: false, right: false, space: false };
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { keys.left = true; e.preventDefault(); }
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { keys.right = true; e.preventDefault(); }
+  if (e.key === ' ') { keys.space = true; e.preventDefault(); }
+}, { passive: false });
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { keys.left = false; e.preventDefault(); }
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { keys.right = false; e.preventDefault(); }
+  if (e.key === ' ') { keys.space = false; e.preventDefault(); }
+}, { passive: false });
+
+// ─── Difficulty Configs ─────────────────────────────────────
+const DIFFICULTIES = {
+  easy: {
+    label: 'Easy',
+    lives: 5,
+    bearBaseSpeed: 50,
+    enemyFireRate: 0.0015,
+    waveSpeedBonus: 10,
+    bearHPBonus: 0,
+    shootCooldown: 0.25,
+    playerSpeed: 350,
+  },
+  medium: {
+    label: 'Medium',
+    lives: 3,
+    bearBaseSpeed: 80,
+    enemyFireRate: 0.003,
+    waveSpeedBonus: 15,
+    bearHPBonus: 0,
+    shootCooldown: 0.3,
+    playerSpeed: 300,
+  },
+  hard: {
+    label: 'Hard',
+    lives: 2,
+    bearBaseSpeed: 110,
+    enemyFireRate: 0.006,
+    waveSpeedBonus: 20,
+    bearHPBonus: 1,
+    shootCooldown: 0.35,
+    playerSpeed: 260,
+  },
+};
+
+let currentDifficulty = 'medium';
+
+// ─── Game Constants ─────────────────────────────────────────
+const BULLET_SPEED = 500;
+const ENEMY_BULLET_SPEED = 200;
+const INVULN_TIME = 1.5;
+const DROP_DISTANCE = 12;
+const GAME_STATES = { MENU: 'MENU', PLAYING: 'PLAYING', GAME_OVER: 'GAME_OVER' };
+
+const BEAR_SIZES = {
+  huge:  { w: 55, h: 50, hp: 3, points: 30, colorOffset: 10 },
+  big:   { w: 44, h: 40, hp: 2, points: 20, colorOffset: 5 },
+  medium:{ w: 35, h: 32, hp: 1, points: 10, colorOffset: 0 }
+};
+
+// ─── Wave Patterns ──────────────────────────────────────────
+const WAVE_PATTERNS = [
+  // Wave 1: Standard grid (always first)
+  { name: 'THE WALL', gen: (diff) => {
+    const enemies = [];
+    const cols = 7, rows = 4, spacingX = 75, spacingY = 65;
+    const startX = (W - (cols-1)*spacingX)/2, startY = 60;
+    for (let r=0; r<rows; r++) for (let c=0; c<cols; c++)
+      enemies.push(makeEnemy(startX + c*spacingX, startY + r*spacingY,
+        r===0?'huge':r===1?'big':'medium', diff));
+    return enemies;
+  }},
+  // Wave 2: V-formation (wedge)
+  { name: 'V FORMATION', gen: (diff) => {
+    const enemies = [];
+    const cx = W/2, spacingX=60, spacingY=55, startY=50;
+    for (let row=0; row<5; row++) {
+      const count = 1 + row*2; // 1,3,5,7,9
+      const half = Math.floor(count/2);
+      for (let c=0; c<count; c++) {
+        const x = cx + (c-half)*spacingX;
+        const y = startY + row*spacingY;
+        const sizeKey = row<1?'huge':row<3?'big':'medium';
+        enemies.push(makeEnemy(x, y, sizeKey, diff));
+      }
+    }
+    return enemies;
+  }},
+  // Wave 3: Diamond
+  { name: 'DIAMOND', gen: (diff) => {
+    const enemies = [];
+    const cx = W/2, spacingX=65, spacingY=55, startY=45;
+    const rows = [1,3,5,7,5,3,1];
+    for (let r=0; r<rows.length; r++) {
+      const count = rows[r];
+      const half = Math.floor(count/2);
+      for (let c=0; c<count; c++) {
+        const x = cx + (c-half)*spacingX;
+        const y = startY + r*spacingY;
+        const sizeKey = r<2?'huge':r<4?'big':'medium';
+        enemies.push(makeEnemy(x, y, sizeKey, diff));
+      }
+    }
+    return enemies;
+  }},
+  // Wave 4: Left & Right clusters
+  { name: 'PINCER', gen: (diff) => {
+    const enemies = [];
+    const spacingX=65, spacingY=55, startY=50;
+    // Left cluster
+    for (let r=0; r<4; r++) for (let c=0; c<3; c++)
+      enemies.push(makeEnemy(60 + c*spacingX, startY + r*spacingY,
+        r===0?'huge':r===1?'big':'medium', diff));
+    // Right cluster
+    for (let r=0; r<4; r++) for (let c=0; c<3; c++)
+      enemies.push(makeEnemy(W-60-c*spacingX, startY + r*spacingY,
+        r===0?'huge':r===1?'big':'medium', diff));
+    return enemies;
+  }},
+  // Wave 5: Swarm — lots of small bears
+  { name: 'SWARM', gen: (diff) => {
+    const enemies = [];
+    const cols=9, rows=5, spacingX=60, spacingY=50, startY=40;
+    const startX = (W - (cols-1)*spacingX)/2;
+    for (let r=0; r<rows; r++) for (let c=0; c<cols; c++)
+      enemies.push(makeEnemy(startX + c*spacingX, startY + r*spacingY, 'medium', diff));
+    return enemies;
+  }},
+  // Wave 6: Tanks — few huge bears with bonus HP
+  { name: 'TANKS', gen: (diff) => {
+    const enemies = [];
+    const spacingX=130, startY=60;
+    const startX = (W - 4*spacingX)/2;
+    for (let i=0; i<5; i++) {
+      const e = makeEnemy(startX + i*spacingX, startY + (i%2)*70, 'huge', diff);
+      e.hp += 1; e.maxHp += 1; e.originalPoints += 10;
+      enemies.push(e);
+    }
+    return enemies;
+  }},
+  // Wave 7: Arrowhead pointing down
+  { name: 'ARROWHEAD', gen: (diff) => {
+    const enemies = [];
+    const cx=W/2, spacingX=55, spacingY=50, startY=40;
+    for (let row=0; row<5; row++) {
+      const count = 7 - row; // 7,6,5,4,3
+      const half = Math.floor(count/2);
+      for (let c=0; c<count; c++) {
+        const x = cx + (c-half)*spacingX - row*8;
+        const y = startY + row*spacingY;
+        const sizeKey = row<=1?'huge':row<=2?'big':'medium';
+        enemies.push(makeEnemy(x, y, sizeKey, diff));
+      }
+    }
+    return enemies;
+  }},
+];
+
+function makeEnemy(x, y, sizeKey, diff) {
+  const sz = BEAR_SIZES[sizeKey];
+  const extraHP = diff.bearHPBonus;
+  return {
+    x, y, w: sz.w, h: sz.h, hp: sz.hp + extraHP, maxHp: sz.hp + extraHP,
+    points: sz.points, originalPoints: sz.points, sizeKey,
+    colorOffset: sz.colorOffset, alive: true, hitFlash: 0
+  };
+}
+
+// ─── Game State ─────────────────────────────────────────────
+let game = {};
+let gameStarted = false;
+
+function resetGame() {
+  const diff = DIFFICULTIES[currentDifficulty];
+  game = {
+    state: GAME_STATES.PLAYING,
+    score: 0,
+    wave: 1,
+    waveName: '',
+    lives: diff.lives,
+    player: null,
+    bullets: [],
+    enemyBullets: [],
+    enemies: [],
+    particles: [],
+    snowflakes: [],
+    stars: [],
+    shootTimer: 0,
+    enemyDir: 1,
+    enemySpeed: diff.bearBaseSpeed,
+    screenShake: 0,
+    shakeIntensity: 0,
+    difficulty: currentDifficulty,
+  };
+
+  // ── Stars ──
+  for (let i = 0; i < 100; i++) {
+    game.stars.push({
+      x: Math.random() * W,
+      y: Math.random() * H * 0.7,
+      r: Math.random() * 1.5 + 0.5,
+      speed: Math.random() * 0.3 + 0.1,
+      brightness: Math.random() * 0.5 + 0.5
+    });
+  }
+
+  // ── Snowflakes ──
+  for (let i = 0; i < 30; i++) {
+    game.snowflakes.push(createSnowflake());
+  }
+
+  // ── Player ──
+  game.player = { x: W / 2, y: H - 50, invulnTimer: 0 };
+
+  // ── Enemies ──
+  spawnWave();
+}
+
+function createSnowflake() {
+  return {
+    x: Math.random() * W,
+    y: Math.random() * H,
+    r: Math.random() * 3 + 2,
+    speed: Math.random() * 40 + 20,
+    drift: Math.random() * 30 - 15,
+    alpha: Math.random() * 0.4 + 0.3
+  };
+}
+
+function spawnWave() {
+  const diff = DIFFICULTIES[currentDifficulty];
+  // Pick pattern cycling through available ones
+  const patternIndex = (game.wave - 1) % WAVE_PATTERNS.length;
+  const pattern = WAVE_PATTERNS[patternIndex];
+  game.waveName = pattern.name;
+  game.enemies = pattern.gen(diff);
+}
+
+// ─── Drawing Functions ──────────────────────────────────────
+
+function drawPenguin(px, py, flash) {
+  if (flash && Math.floor(Date.now() / 100) % 2 === 0) return; // flashing effect
+
+  // Body (black oval)
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.ellipse(px, py + 5, 18, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // White belly
+  ctx.fillStyle = '#e8e8f0';
+  ctx.beginPath();
+  ctx.ellipse(px, py + 8, 11, 16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.arc(px, py - 12, 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  // White face
+  ctx.fillStyle = '#e8e8f0';
+  ctx.beginPath();
+  ctx.arc(px, py - 13, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eyes
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(px - 4, py - 15, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(px + 4, py - 15, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye shine
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(px - 3, py - 16, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(px + 5, py - 16, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Beak
+  ctx.fillStyle = '#ff8800';
+  ctx.beginPath();
+  ctx.moveTo(px - 3, py - 10);
+  ctx.lineTo(px + 3, py - 10);
+  ctx.lineTo(px, py - 6);
+  ctx.closePath();
+  ctx.fill();
+
+  // Feet
+  ctx.fillStyle = '#ff8800';
+  ctx.beginPath();
+  ctx.ellipse(px - 8, py + 24, 6, 3, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(px + 8, py + 24, 6, 3, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Gun/turret on top of head
+  ctx.fillStyle = '#555';
+  ctx.fillRect(px - 3, py - 30, 6, 10);
+  // Gun barrel
+  ctx.fillStyle = '#777';
+  ctx.fillRect(px - 2, py - 36, 4, 8);
+  // Gun tip
+  ctx.fillStyle = '#ffaa00';
+  ctx.fillRect(px - 1, py - 38, 2, 3);
+
+  // Flippers
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.ellipse(px - 20, py + 5, 5, 12, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(px + 20, py + 5, 5, 12, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPolarBear(e) {
+  const x = e.x, y = e.y, w = e.w, h = e.h;
+  const hue = 40 - e.colorOffset * 0.5;
+  const baseColor = `hsl(${hue}, 15%, ${85 + e.colorOffset * 0.5}%)`;
+
+  if (e.hitFlash > 0) {
+    ctx.save();
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 20;
+  }
+
+  // Body
+  ctx.fillStyle = baseColor;
+  ctx.beginPath();
+  ctx.ellipse(x, y, w * 0.42, h * 0.42, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.beginPath();
+  ctx.arc(x, y - h * 0.28, w * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ears
+  ctx.beginPath();
+  ctx.arc(x - w * 0.2, y - h * 0.38, w * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w * 0.2, y - h * 0.38, w * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inner ears
+  ctx.fillStyle = `hsl(${hue + 10}, 20%, 75%)`;
+  ctx.beginPath();
+  ctx.arc(x - w * 0.2, y - h * 0.38, w * 0.04, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w * 0.2, y - h * 0.38, w * 0.04, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Muzzle
+  ctx.fillStyle = `hsl(${hue}, 10%, 93%)`;
+  ctx.beginPath();
+  ctx.ellipse(x, y - h * 0.22, w * 0.14, h * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Nose
+  ctx.fillStyle = '#222';
+  ctx.beginPath();
+  ctx.arc(x, y - h * 0.24, w * 0.04, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eyes
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(x - w * 0.1, y - h * 0.32, w * 0.03, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w * 0.1, y - h * 0.32, w * 0.03, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye shine
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(x - w * 0.08, y - h * 0.33, w * 0.012, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w * 0.12, y - h * 0.33, w * 0.012, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Legs
+  ctx.fillStyle = baseColor;
+  ctx.beginPath();
+  ctx.ellipse(x - w * 0.18, y + h * 0.36, w * 0.1, h * 0.06, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.18, y + h * 0.36, w * 0.1, h * 0.06, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (e.hitFlash > 0) {
+    ctx.restore();
+  }
+
+  // HP bar
+  if (e.maxHp > 1) {
+    const barW = w * 0.7;
+    const barH = 4;
+    const barX = x - barW / 2;
+    const barY = y + h * 0.44;
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = e.hp > 1 ? '#4f4' : '#ff4';
+    ctx.fillRect(barX, barY, barW * (e.hp / e.maxHp), barH);
+  }
+}
+
+function drawBullet(b) {
+  ctx.shadowColor = '#ff4';
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = '#ffdd44';
+  ctx.fillRect(b.x - 2, b.y - 6, 4, 12);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(b.x - 1, b.y - 2, 2, 4);
+  ctx.shadowBlur = 0;
+}
+
+function drawEnemyBullet(b) {
+  ctx.shadowColor = '#4af';
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = '#88ddff';
+  ctx.beginPath();
+  ctx.ellipse(b.x, b.y, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function drawParticles() {
+  for (const p of game.particles) {
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSnowflakes() {
+  for (const s of game.snowflakes) {
+    ctx.globalAlpha = s.alpha;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawStars() {
+  for (const s of game.stars) {
+    ctx.globalAlpha = s.brightness;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = '20px "Courier New", monospace';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 4;
+
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`Score: ${game.score}`, 20, 20);
+  ctx.textAlign = 'right';
+  ctx.fillText(`Wave ${game.wave}`, W - 20, 20);
+
+  // Wave name
+  if (game.waveName) {
+    ctx.textAlign = 'right';
+    ctx.font = '12px "Courier New", monospace';
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText(`◈ ${game.waveName} ◈`, W - 20, 44);
+  }
+
+  // Difficulty badge
+  ctx.textAlign = 'center';
+  ctx.font = '12px "Courier New", monospace';
+  ctx.fillStyle = '#667';
+  ctx.fillText(DIFFICULTIES[currentDifficulty].label.toUpperCase(), W / 2, 34);
+
+  // Lives
+  ctx.textAlign = 'left';
+  ctx.font = '18px sans-serif';
+  ctx.fillStyle = '#ff4444';
+  for (let i = 0; i < game.lives; i++) {
+    ctx.fillText('♥', 20 + i * 26, H - 30);
+  }
+
+  ctx.shadowBlur = 0;
+}
+
+function drawMenu() {
+  // Dark overlay on canvas
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = '#ffaa00';
+  ctx.shadowBlur = 30;
+  ctx.font = 'bold 48px "Courier New", monospace';
+  ctx.fillStyle = '#ffaa00';
+  ctx.fillText('🐧 PENGUIN INVADERS', W / 2, H * 0.2);
+  ctx.shadowBlur = 0;
+
+  // Subtitle
+  ctx.font = '18px "Courier New", monospace';
+  ctx.fillStyle = '#8899aa';
+  ctx.fillText('A penguin with a gun vs polar bears in space!', W / 2, H * 0.28);
+
+  // Difficulty instructions
+  ctx.font = '14px "Courier New", monospace';
+  ctx.fillStyle = '#667';
+  ctx.fillText('Select difficulty and press SPACE to start', W / 2, H * 0.36);
+
+  // Difficulty options
+  const difficulties = ['easy', 'medium', 'hard'];
+  const colors = { easy: '#4f4', medium: '#ff4', hard: '#f44' };
+  const labels = { easy: 'EASY', medium: 'MEDIUM', hard: 'HARD' };
+  const descs = {
+    easy: '5 lives · Slow · Light fire',
+    medium: '3 lives · Regular pace',
+    hard: '2 lives · Fast · Heavy fire'
+  };
+
+  const boxW = 210;
+  const boxH = 72;
+  const gap = 20;
+  const totalW = 3 * boxW + 2 * gap;
+  const startX = (W - totalW) / 2;
+  const boxY = H * 0.44;
+
+  ctx.strokeStyle = '#334';
+
+  for (let i = 0; i < 3; i++) {
+    const d = difficulties[i];
+    const bx = startX + i * (boxW + gap);
+    const isActive = d === currentDifficulty;
+
+    // Box background
+    ctx.fillStyle = isActive ? 'rgba(255,170,0,0.15)' : 'rgba(20,20,50,0.8)';
+    ctx.fillRect(bx, boxY, boxW, boxH);
+    ctx.strokeRect(bx, boxY, boxW, boxH);
+
+    if (isActive) {
+      ctx.strokeStyle = '#ffaa00';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, boxY, boxW, boxH);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#334';
+    }
+
+    // Label
+    ctx.fillStyle = isActive ? '#ffaa00' : colors[d];
+    ctx.font = 'bold 18px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(labels[d], bx + boxW / 2, boxY + 22);
+
+    // Description
+    ctx.fillStyle = isActive ? '#aab' : '#667';
+    ctx.font = '11px "Courier New", monospace';
+    ctx.fillText(descs[d], bx + boxW / 2, boxY + 52);
+
+    // Arrow indicator for active
+    if (isActive) {
+      ctx.fillStyle = '#ffaa00';
+      ctx.font = '16px sans-serif';
+      ctx.fillText('◀', bx - 10, boxY + boxH / 2);
+      ctx.fillText('▶', bx + boxW + 10, boxY + boxH / 2);
+    }
+  }
+
+  // Controls hint
+  ctx.fillStyle = '#556';
+  ctx.font = '12px "Courier New", monospace';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('← →  or  A/D  to select difficulty   ·   SPACE to play', W / 2, H - 60);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('F or ⛶ button for fullscreen', W / 2, H - 40);
+}
+
+function drawGameOver() {
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.shadowColor = '#ff4444';
+  ctx.shadowBlur = 30;
+  ctx.font = 'bold 52px "Courier New", monospace';
+  ctx.fillStyle = '#ff4444';
+  ctx.fillText('GAME OVER', W / 2, H * 0.35);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '28px "Courier New", monospace';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`Final Score: ${game.score}`, W / 2, H * 0.47);
+
+  ctx.font = '16px "Courier New", monospace';
+  ctx.fillStyle = '#ffaa00';
+  ctx.fillText(`Wave: ${game.wave}  •  Difficulty: ${DIFFICULTIES[currentDifficulty].label}`, W / 2, H * 0.55);
+
+  ctx.font = '18px "Courier New", monospace';
+  ctx.fillStyle = '#8899aa';
+  ctx.fillText('Press SPACE to Restart', W / 2, H * 0.66);
+  ctx.fillText('Press ESC for Menu', W / 2, H * 0.72);
+}
+
+// ─── Update Functions ───────────────────────────────────────
+
+function spawnParticles(x, y, count, color, life) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 120 + 40;
+    game.particles.push({
+      x: x, y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: life || 0.6,
+      alpha: 1,
+      size: Math.random() * 3 + 1.5,
+      color: color || '#ffdd44'
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = game.particles.length - 1; i >= 0; i--) {
+    const p = game.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+    p.alpha = Math.max(0, p.life / 0.6);
+    p.size *= (1 - dt * 0.5);
+    if (p.life <= 0 || p.alpha <= 0) {
+      game.particles.splice(i, 1);
+    }
+  }
+}
+
+function updateSnowflakes(dt) {
+  for (const s of game.snowflakes) {
+    s.y += s.speed * dt;
+    s.x += Math.sin(s.y * 0.01) * s.drift * dt;
+    if (s.y > H) {
+      s.y = -5;
+      s.x = Math.random() * W;
+    }
+    if (s.x < -5) s.x = W + 5;
+    if (s.x > W + 5) s.x = -5;
+  }
+}
+
+function updateStars(dt) {
+  for (const s of game.stars) {
+    s.brightness += (Math.random() - 0.5) * dt * 2;
+    s.brightness = Math.max(0.3, Math.min(1, s.brightness));
+  }
+}
+
+function checkBulletCollisions() {
+  const diff = DIFFICULTIES[currentDifficulty];
+  for (let bi = game.bullets.length - 1; bi >= 0; bi--) {
+    const b = game.bullets[bi];
+    for (let ei = game.enemies.length - 1; ei >= 0; ei--) {
+      const e = game.enemies[ei];
+      if (!e.alive) continue;
+      if (b.x > e.x - e.w / 2 && b.x < e.x + e.w / 2 &&
+          b.y > e.y - e.h / 2 && b.y < e.y + e.h / 2) {
+        game.bullets.splice(bi, 1);
+        e.hp--;
+        e.hitFlash = 0.1;
+        if (e.hp > 0) {
+          // Shrink to next size
+          const sizes = ['huge', 'big', 'medium'];
+          const idx = sizes.indexOf(e.sizeKey);
+          if (idx < sizes.length - 1) {
+            e.sizeKey = sizes[idx + 1];
+            const newSz = BEAR_SIZES[e.sizeKey];
+            e.w = newSz.w;
+            e.h = newSz.h;
+          }
+          spawnParticles(e.x, e.y, 6, '#ffdd44', 0.6);
+        } else {
+          e.alive = false;
+          game.score += e.originalPoints;
+          spawnParticles(e.x, e.y, 12, '#ffdd44', 1.2);
+        }
+        break;
+      }
+    }
+  }
+}
+
+function checkEnemyBulletCollisions() {
+  const p = game.player;
+  if (p.invulnTimer > 0) return;
+
+  for (let bi = game.enemyBullets.length - 1; bi >= 0; bi--) {
+    const b = game.enemyBullets[bi];
+    if (b.x > p.x - 15 && b.x < p.x + 15 &&
+        b.y > p.y - 25 && b.y < p.y + 25) {
+      game.enemyBullets.splice(bi, 1);
+      game.lives--;
+      p.invulnTimer = INVULN_TIME;
+      game.screenShake = 0.3;
+      game.shakeIntensity = 8;
+
+      if (game.lives <= 0) {
+        game.state = GAME_STATES.GAME_OVER;
+      }
+      return;
+    }
+  }
+}
+
+function updatePlayer(dt) {
+  const diff = DIFFICULTIES[currentDifficulty];
+  const p = game.player;
+
+  if (p.invulnTimer > 0) p.invulnTimer -= dt;
+
+  if (keys.left) p.x -= diff.playerSpeed * dt;
+  if (keys.right) p.x += diff.playerSpeed * dt;
+  p.x = Math.max(20, Math.min(W - 20, p.x));
+
+  game.shootTimer -= dt;
+  if (keys.space && game.shootTimer <= 0) {
+    game.bullets.push({
+      x: p.x,
+      y: p.y - 38
+    });
+    game.shootTimer = diff.shootCooldown;
+  }
+}
+
+function updateBullets(dt) {
+  for (const b of game.bullets) {
+    b.y -= BULLET_SPEED * dt;
+  }
+  for (const b of game.enemyBullets) {
+    b.y += ENEMY_BULLET_SPEED * dt;
+  }
+  for (let i = game.enemyBullets.length - 1; i >= 0; i--) {
+    if (game.enemyBullets[i].y > H + 20) {
+      game.enemyBullets.splice(i, 1);
+    }
+  }
+}
+
+function updateEnemies(dt) {
+  const diff = DIFFICULTIES[currentDifficulty];
+  const aliveEnemies = game.enemies.filter(e => e.alive);
+  if (aliveEnemies.length === 0) {
+    game.wave++;
+    game.enemyBullets = [];
+    game.enemySpeed = diff.bearBaseSpeed + game.wave * diff.waveSpeedBonus;
+    spawnWave();
+    return;
+  }
+
+  let hitEdge = false;
+  for (const e of aliveEnemies) {
+    e.x += game.enemySpeed * game.enemyDir * dt;
+    if (e.x - e.w / 2 < 10 || e.x + e.w / 2 > W - 10) {
+      hitEdge = true;
+    }
+  }
+
+  if (hitEdge) {
+    game.enemyDir *= -1;
+    game.enemySpeed += 2;
+    for (const e of aliveEnemies) {
+      e.y += DROP_DISTANCE;
+      if (e.y + e.h / 2 >= game.player.y - 20) {
+        game.state = GAME_STATES.GAME_OVER;
+        return;
+      }
+    }
+  }
+
+  // Hit flash decay
+  for (const e of aliveEnemies) {
+    if (e.hitFlash > 0) e.hitFlash -= dt;
+  }
+
+  // Bottom-row shooting
+  const bottomRow = {};
+  for (const e of aliveEnemies) {
+    const colKey = Math.round(e.x / 75);
+    if (!bottomRow[colKey] || e.y > bottomRow[colKey].y) {
+      bottomRow[colKey] = e;
+    }
+  }
+
+  for (const colKey in bottomRow) {
+    const e = bottomRow[colKey];
+    if (Math.random() < diff.enemyFireRate) {
+      game.enemyBullets.push({
+        x: e.x,
+        y: e.y + e.h / 2,
+        w: 6,
+        h: 10
+      });
+    }
+  }
+}
+
+// ─── Render ──────────────────────────────────────────────────
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bgGrad.addColorStop(0, '#0a0a2e');
+  bgGrad.addColorStop(0.5, '#0f0f3a');
+  bgGrad.addColorStop(1, '#080820');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Screen shake
+  if (game.screenShake > 0) {
+    const intensity = game.shakeIntensity * (game.screenShake / 0.3);
+    const shakeX = (Math.random() - 0.5) * intensity;
+    const shakeY = (Math.random() - 0.5) * intensity;
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+  }
+
+  // Menu state
+  if (game.state === GAME_STATES.MENU) {
+    drawStars();
+    drawSnowflakes();
+    drawMenu();
+    if (game.screenShake > 0) ctx.restore();
+    return;
+  }
+
+  drawStars();
+  drawSnowflakes();
+  drawParticles();
+
+  // Draw enemies
+  for (const e of game.enemies) {
+    if (e.alive) drawPolarBear(e);
+  }
+
+  // Draw player
+  if (game.state === GAME_STATES.PLAYING) {
+    const flash = game.player.invulnTimer > 0;
+    drawPenguin(game.player.x, game.player.y, flash);
+  }
+
+  // Draw bullets
+  for (const b of game.bullets) drawBullet(b);
+  for (const b of game.enemyBullets) drawEnemyBullet(b);
+
+  drawHUD();
+
+  if (game.state === GAME_STATES.GAME_OVER) {
+    if (game.screenShake > 0) {
+      ctx.restore();
+    }
+    drawGameOver();
+    return;
+  }
+
+  if (game.screenShake > 0) {
+    ctx.restore();
+  }
+}
+
+// ─── Update ──────────────────────────────────────────────────
+
+function update(dt) {
+  const cappedDt = Math.min(dt, 0.05);
+
+  if (game.state === GAME_STATES.MENU) {
+    // Menu keyboard navigation
+    const diffs = ['easy', 'medium', 'hard'];
+    if (keys.left && !game._menuCooldown) {
+      game._menuCooldown = 0.2;
+      const idx = diffs.indexOf(currentDifficulty);
+      if (idx > 0) currentDifficulty = diffs[idx - 1];
+      updateDiffButtons();
+    }
+    if (keys.right && !game._menuCooldown) {
+      game._menuCooldown = 0.2;
+      const idx = diffs.indexOf(currentDifficulty);
+      if (idx < diffs.length - 1) currentDifficulty = diffs[idx + 1];
+      updateDiffButtons();
+    }
+    if (game._menuCooldown) {
+      game._menuCooldown -= cappedDt;
+      if (game._menuCooldown < 0) game._menuCooldown = 0;
+    }
+    if (keys.space) {
+      resetGame();
+      game.state = GAME_STATES.PLAYING;
+    }
+    updateSnowflakes(cappedDt);
+    updateStars(cappedDt);
+    return;
+  }
+
+  if (game.state === GAME_STATES.GAME_OVER) {
+    if (keys.space) {
+      resetGame();
+    }
+    updateSnowflakes(cappedDt);
+    updateParticles(cappedDt);
+    return;
+  }
+
+  updatePlayer(cappedDt);
+  updateBullets(cappedDt);
+  updateEnemies(cappedDt);
+  checkBulletCollisions();
+  checkEnemyBulletCollisions();
+  updateParticles(cappedDt);
+  updateSnowflakes(cappedDt);
+  updateStars(cappedDt);
+
+  if (game.screenShake > 0) {
+    game.screenShake -= cappedDt;
+    if (game.screenShake < 0) game.screenShake = 0;
+  }
+}
+
+// ─── Game Loop ──────────────────────────────────────────────
+let lastTime = 0;
+
+function gameLoop(timestamp) {
+  const dt = (timestamp - lastTime) / 1000;
+  lastTime = timestamp;
+
+  update(dt);
+  render();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ─── UI Controls ────────────────────────────────────────────
+
+function updateDiffButtons() {
+  ['easy', 'medium', 'hard'].forEach(d => {
+    const btn = document.getElementById('diff' + d.charAt(0).toUpperCase() + d.slice(1));
+    if (btn) {
+      btn.classList.toggle('active', d === currentDifficulty);
+    }
+  });
+}
+
+function toggleFullscreen() {
+  const container = document.querySelector('.game-container');
+  if (!document.fullscreenElement) {
+    container.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+// Difficulty button clicks
+document.getElementById('diffEasy').addEventListener('click', () => {
+  currentDifficulty = 'easy';
+  updateDiffButtons();
+});
+document.getElementById('diffMedium').addEventListener('click', () => {
+  currentDifficulty = 'medium';
+  updateDiffButtons();
+});
+document.getElementById('diffHard').addEventListener('click', () => {
+  currentDifficulty = 'hard';
+  updateDiffButtons();
+});
+
+// Fullscreen button
+document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+
+// F key for fullscreen
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'f' || e.key === 'F') {
+    toggleFullscreen();
+    e.preventDefault();
+  }
+  // ESC from game over back to menu
+  if (e.key === 'Escape' && game.state === GAME_STATES.GAME_OVER) {
+    game.state = GAME_STATES.MENU;
+  }
+});
+
+// ─── Start ──────────────────────────────────────────────────
+resetGame();
+game.state = GAME_STATES.MENU;
+requestAnimationFrame(gameLoop);
+
+// ─── Fullscreen resize ─────────────────────────────────────
+function resizeCanvas() {
+  if (document.fullscreenElement) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const scale = Math.min(vw / W, vh / H);
+    canvas.style.width = (W * scale) + 'px';
+    canvas.style.height = (H * scale) + 'px';
+  } else {
+    canvas.style.width = '';
+    canvas.style.height = '';
+  }
+}
+document.addEventListener('fullscreenchange', resizeCanvas);
+window.addEventListener('resize', resizeCanvas);
+
+canvas.focus();
+canvas.addEventListener('click', () => canvas.focus());
+
+</script>
+</body>
+</html>
