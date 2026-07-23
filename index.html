@@ -667,7 +667,7 @@ function createSnowflake() {
 
 // ─── Wave Modifiers ─────────────────────────────────────────
 const WAVE_MODIFIERS = [
-  { name: 'FAST', desc: 'Speed +', apply: (enemies) => enemies.forEach(e => { e.bossSpeed = (e.bossSpeed || 0) + 30; }) },
+  { name: 'FAST', desc: 'Speed +', apply: (enemies) => enemies.forEach(e => { e.bossSpeed = (e.bossSpeed || 0) + 15; }) },
   { name: 'FORTIFIED', desc: 'Armor +', apply: (enemies) => enemies.forEach(e => { e.hp += 1; e.maxHp += 1; }) },
   { name: 'REVERSE', desc: 'Reverse', apply: (enemies) => { /* handled in spawnWave */ } },
   { name: 'DENSE', desc: 'More!', apply: (enemies) => {
@@ -737,10 +737,9 @@ function spawnWave() {
       if (game.waveModifier.name === 'REVERSE') {
         game.enemyDir = -1;
       }
-      // FAST: boost global enemy speed too
-      if (game.waveModifier.name === 'FAST') {
-        game.enemySpeed *= 1.4;
-      }
+      // FAST no longer boosts global enemy speed — the bossSpeed bonus
+      // on individual enemies (applied above) is sufficient effect.
+      // (was 1.4x, halved to 1.2x, but still lethal on WINGS formations)
     }
 
     game.waveAnnounceText = 'Wave ' + game.wave + ' — ' + pattern.name
@@ -1479,8 +1478,8 @@ function addScorePopup(x, y, points, color, size) {
 function spawnPowerUp(x, y) {
   const diff = DIFFICULTIES[currentDifficulty];
   if (Math.random() > diff.powerUpChance) return;
-  // Weighted selection: nuke is much rarer than other powerups
-  const weights = { spread: 3, rapid: 3, shield: 2, life: 1, nuke: 0.15 };
+  // Weighted selection: more balanced variety across all powerup types
+  const weights = { spread: 2, rapid: 2, shield: 3, life: 2.5, nuke: 1.5 };
   let total = 0;
   for (const k in weights) total += weights[k];
   let r = Math.random() * total;
