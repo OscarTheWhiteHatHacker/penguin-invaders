@@ -108,12 +108,13 @@
 <div class="game-container">
   <h1>🐧 Penguin Invaders</h1>
   <canvas id="gameCanvas" width="800" height="600" tabindex="0"></canvas>
-  <p class="instructions">Arrow Keys to Move &nbsp;|&nbsp; Space to Shoot &nbsp;|&nbsp; A/D also works</p>
+  <p class="instructions">⟵/→ or A/D Move &nbsp;|&nbsp; Space Shoot &nbsp;|&nbsp; F Fullscreen &nbsp;|&nbsp; M Sound</p>
   <div class="controls">
     <button class="btn" data-diff="easy" id="diffEasy">Easy</button>
     <button class="btn active" data-diff="medium" id="diffMedium">Medium</button>
     <button class="btn" data-diff="hard" id="diffHard">Hard</button>
     <button class="btn fullscreen-btn" id="fullscreenBtn">⛶ Fullscreen</button>
+    <button class="btn" id="muteBtn" title="Toggle sound (M key)">🔊</button>
   </div>
 </div>
 <script>
@@ -183,6 +184,124 @@ const BEAR_SIZES = {
   huge:  { w: 55, h: 50, hp: 3, points: 30, colorOffset: 10 },
   big:   { w: 44, h: 40, hp: 2, points: 20, colorOffset: 5 },
   medium:{ w: 35, h: 32, hp: 1, points: 10, colorOffset: 0 }
+};
+
+// ─── Audio Manager (Web Audio API) ──────────────────────────
+const Audio = {
+  _ctx: null, _musicGain: null, _sfxGain: null,
+  _musicOn: false, _musicIdx: 0, _musicTimeout: null, _muted: false,
+
+  init() {
+    this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const master = this._ctx.createGain();
+    master.gain.value = 0.35;
+    master.connect(this._ctx.destination);
+    this._sfxGain = this._ctx.createGain();
+    this._sfxGain.gain.value = 0.5;
+    this._sfxGain.connect(master);
+    this._musicGain = this._ctx.createGain();
+    this._musicGain.gain.value = 0.12;
+    this._musicGain.connect(master);
+  },
+  _ensure() {
+    if (!this._ctx) this.init();
+    if (this._ctx.state === 'suspended') this._ctx.resume();
+  },
+
+  // --- SFX ---
+  shoot() {
+    if (this._muted) return;
+    this._ensure();
+    const c = this._ctx, t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'square'; o.frequency.setValueAtTime(800,t); o.frequency.exponentialRampToValueAtTime(400,t+0.08);
+    g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+    o.connect(g); g.connect(this._sfxGain); o.start(t); o.stop(t+0.1);
+  },
+  enemyHit() {
+    if (this._muted) return;
+    this._ensure();
+    const c = this._ctx, t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(300,t); o.frequency.exponentialRampToValueAtTime(150,t+0.12);
+    g.gain.setValueAtTime(0.25,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.15);
+    o.connect(g); g.connect(this._sfxGain); o.start(t); o.stop(t+0.15);
+  },
+  enemyKill() {
+    if (this._muted) return;
+    this._ensure();
+    const c = this._ctx, t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(400,t); o.frequency.exponentialRampToValueAtTime(80,t+0.3);
+    g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+    o.connect(g); g.connect(this._sfxGain); o.start(t); o.stop(t+0.35);
+  },
+  playerHit() {
+    if (this._muted) return;
+    this._ensure();
+    const c = this._ctx, t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.2);
+    g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.25);
+    o.connect(g); g.connect(this._sfxGain); o.start(t); o.stop(t+0.25);
+  },
+  gameOver() {
+    if (this._muted) return;
+    this._ensure();
+    const c = this._ctx, t = c.currentTime;
+    [400,350,300,200,150].forEach((f,i)=>{
+      const o=c.createOscillator(),g=c.createGain();
+      o.type='square'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.2,t+i*0.12); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.12+0.15);
+      o.connect(g); g.connect(this._sfxGain); o.start(t+i*0.12); o.stop(t+i*0.12+0.15);
+    });
+  },
+  waveComplete() {
+    if (this._muted) return;
+    this._ensure();
+    const c = this._ctx, t = c.currentTime;
+    [262,330,392,523].forEach((f,i)=>{
+      const o=c.createOscillator(),g=c.createGain();
+      o.type='square'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.25,t+i*0.1); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.1+0.2);
+      o.connect(g); g.connect(this._sfxGain); o.start(t+i*0.1); o.stop(t+i*0.1+0.2);
+    });
+  },
+
+  // --- Music ---
+  _notes: [
+    {f:330,d:0.2},{f:392,d:0.2},{f:440,d:0.25},{f:392,d:0.2},
+    {f:330,d:0.2},{f:294,d:0.2},{f:262,d:0.25},{f:294,d:0.2},
+    {f:330,d:0.18},{f:392,d:0.18},{f:440,d:0.18},{f:523,d:0.25},
+    {f:440,d:0.18},{f:392,d:0.18},{f:330,d:0.18},{f:262,d:0.3},
+  ],
+  startMusic() {
+    this._ensure();
+    if (this._muted) return;
+    this.stopMusic();
+    this._musicOn = true;
+    this._musicIdx = 0;
+    this._playNextNote();
+  },
+  _playNextNote() {
+    if (!this._musicOn || !this._ctx) return;
+    const n = this._notes[this._musicIdx], c = this._ctx, t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'square'; o.frequency.value = n.f;
+    g.gain.setValueAtTime(0.15,t); g.gain.exponentialRampToValueAtTime(0.001,t+n.d*0.9);
+    o.connect(g); g.connect(this._musicGain); o.start(t); o.stop(t+n.d);
+    this._musicIdx = (this._musicIdx + 1) % this._notes.length;
+    this._musicTimeout = setTimeout(() => this._playNextNote(), n.d*1000+40);
+  },
+  stopMusic() {
+    this._musicOn = false;
+    if (this._musicTimeout) { clearTimeout(this._musicTimeout); this._musicTimeout = null; }
+  },
+  toggleMute() {
+    this._muted = !this._muted;
+    if (this._muted) this.stopMusic();
+    return this._muted;
+  }
 };
 
 // ─── Wave Patterns ──────────────────────────────────────────
@@ -638,6 +757,12 @@ function drawHUD() {
     ctx.fillText('♥', 20 + i * 26, H - 30);
   }
 
+  // Sound indicator
+  ctx.textAlign = 'right';
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = Audio._muted ? '#ff4444' : '#44ff44';
+  ctx.fillText(Audio._muted ? '🔇' : '🔊', W - 20, H - 30);
+
   ctx.shadowBlur = 0;
 }
 
@@ -826,6 +951,7 @@ function checkBulletCollisions() {
         e.hp--;
         e.hitFlash = 0.1;
         if (e.hp > 0) {
+          Audio.enemyHit();
           // Shrink to next size
           const sizes = ['huge', 'big', 'medium'];
           const idx = sizes.indexOf(e.sizeKey);
@@ -839,6 +965,7 @@ function checkBulletCollisions() {
         } else {
           e.alive = false;
           game.score += e.originalPoints;
+          Audio.enemyKill();
           spawnParticles(e.x, e.y, 12, '#ffdd44', 1.2);
         }
         break;
@@ -857,12 +984,15 @@ function checkEnemyBulletCollisions() {
         b.y > p.y - 25 && b.y < p.y + 25) {
       game.enemyBullets.splice(bi, 1);
       game.lives--;
+      Audio.playerHit();
       p.invulnTimer = INVULN_TIME;
       game.screenShake = 0.3;
       game.shakeIntensity = 8;
 
       if (game.lives <= 0) {
         game.state = GAME_STATES.GAME_OVER;
+        Audio.stopMusic();
+        Audio.gameOver();
       }
       return;
     }
@@ -881,10 +1011,8 @@ function updatePlayer(dt) {
 
   game.shootTimer -= dt;
   if (keys.space && game.shootTimer <= 0) {
-    game.bullets.push({
-      x: p.x,
-      y: p.y - 38
-    });
+    game.bullets.push({ x: p.x, y: p.y - 38 });
+    Audio.shoot();
     game.shootTimer = diff.shootCooldown;
   }
 }
@@ -907,6 +1035,7 @@ function updateEnemies(dt) {
   const diff = DIFFICULTIES[currentDifficulty];
   const aliveEnemies = game.enemies.filter(e => e.alive);
   if (aliveEnemies.length === 0) {
+    Audio.waveComplete();
     game.wave++;
     game.enemyBullets = [];
     game.enemySpeed = diff.bearBaseSpeed + game.wave * diff.waveSpeedBonus;
@@ -1053,6 +1182,7 @@ function update(dt) {
     if (keys.space) {
       resetGame();
       game.state = GAME_STATES.PLAYING;
+      Audio.startMusic();
     }
     updateSnowflakes(cappedDt);
     updateStars(cappedDt);
@@ -1062,6 +1192,7 @@ function update(dt) {
   if (game.state === GAME_STATES.GAME_OVER) {
     if (keys.space) {
       resetGame();
+      Audio.startMusic();
     }
     updateSnowflakes(cappedDt);
     updateParticles(cappedDt);
@@ -1133,6 +1264,21 @@ document.getElementById('diffHard').addEventListener('click', () => {
 // Fullscreen button
 document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
 
+// Mute button
+document.getElementById('muteBtn').addEventListener('click', () => {
+  const muted = Audio.toggleMute();
+  document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+});
+
+// M key for mute toggle
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'm' || e.key === 'M') {
+    const muted = Audio.toggleMute();
+    document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+    e.preventDefault();
+  }
+});
+
 // F key for fullscreen
 document.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') {
@@ -1142,6 +1288,7 @@ document.addEventListener('keydown', (e) => {
   // ESC from game over back to menu
   if (e.key === 'Escape' && game.state === GAME_STATES.GAME_OVER) {
     game.state = GAME_STATES.MENU;
+    Audio.stopMusic();
   }
 });
 
