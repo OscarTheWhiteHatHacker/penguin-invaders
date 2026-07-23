@@ -1072,6 +1072,11 @@ function updateBullets(dt) {
   for (const b of game.enemyBullets) {
     b.y += ENEMY_BULLET_SPEED * dt;
   }
+  for (let i = game.bullets.length - 1; i >= 0; i--) {
+    if (game.bullets[i].y < -20) {
+      game.bullets.splice(i, 1);
+    }
+  }
   for (let i = game.enemyBullets.length - 1; i >= 0; i--) {
     if (game.enemyBullets[i].y > H + 20) {
       game.enemyBullets.splice(i, 1);
