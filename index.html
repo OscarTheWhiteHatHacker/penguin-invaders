@@ -108,7 +108,7 @@
 <div class="game-container">
   <h1>🐧 Penguin Invaders</h1>
   <canvas id="gameCanvas" width="800" height="600" tabindex="0"></canvas>
-  <p class="instructions">⟵/→ or A/D Move &nbsp;|&nbsp; Space Shoot &nbsp;|&nbsp; P Pause &nbsp;|&nbsp; 1 Fullscreen &nbsp;|&nbsp; M Sound</p>
+  <p class="instructions">⟵/→ or A/D Move &nbsp;|&nbsp; Space Shoot &nbsp;|&nbsp; Shift Autofire &nbsp;|&nbsp; P Pause &nbsp;|&nbsp; 1 Fullscreen &nbsp;|&nbsp; M Sound</p>
   <div class="controls">
     <button class="btn" data-diff="easy" id="diffEasy">Easy</button>
     <button class="btn active" data-diff="medium" id="diffMedium">Medium</button>
@@ -128,6 +128,7 @@ let renderScale = 1;
 // ─── Key State ───────────────────────────────────────────────
 const keys = { left: false, right: false, space: false };
 let spaceJustPressed = false; // edge-triggered: true only on the frame space goes down
+let autofireEnabled = false; // toggled by left Shift
 
 function handleKey(e, pressed) {
   const k = e.key;
@@ -158,7 +159,10 @@ let currentDifficulty = 'medium';
 const BULLET_SPEED = 500;
 const ENEMY_BULLET_SPEED = 200;
 const INVULN_TIME = 1.5;
-const DROP_DISTANCE = 12;
+function getDropDistance(wave) {
+  return Math.min(12 + wave * 2, 40);
+}
+const FLOOR_Y = () => game.player ? game.player.y - 20 : H - 70; // floor line: top of the player
 const GAME_STATES = { MENU:'MENU', PLAYING:'PLAYING', GAME_OVER:'GAME_OVER', PAUSED:'PAUSED' };
 
 const BEAR_SIZES = {
@@ -429,30 +433,140 @@ const WAVE_PATTERNS = [
     }
     return enemies;
   }},
+  { name: 'X', gen: (diff) => {
+    const enemies = [];
+    const cx = W/2, spacingX=60, spacingY=55, startY=45;
+    // Two diagonal lines crossing in the center
+    for (let i=0; i<4; i++) {
+      const x = cx + (i-1.5)*spacingX;
+      const y = startY + Math.abs(i-1.5)*spacingY;
+      enemies.push(makeEnemy(x, y, 'huge', diff));
+    }
+    for (let i=0; i<4; i++) {
+      const x = cx + (i-1.5)*spacingX;
+      const y = startY + (3-Math.abs(i-1.5))*spacingY;
+      enemies.push(makeEnemy(x, y, 'big', diff));
+    }
+    return enemies;
+  }},
+  { name: 'PHALANX', gen: (diff) => {
+    const enemies = [];
+    const cols=6, spacingX=65, spacingY=55, startY=50;
+    const startX = (W - (cols-1)*spacingX)/2;
+    // Solid block: 3 rows of big, 1 row of huge at top
+    for (let r=0; r<4; r++) for (let c=0; c<cols; c++)
+      enemies.push(makeEnemy(startX + c*spacingX, startY + r*spacingY,
+        r===0?'huge':'big', diff));
+    return enemies;
+  }},
+  { name: 'WINGS', gen: (diff) => {
+    const enemies = [];
+    const spacingX=65, spacingY=55, startY=55;
+    // Two wings spreading outward from center
+    for (let r=0; r<4; r++) {
+      const count = r+2;
+      for (let c=0; c<count; c++) {
+        enemies.push(makeEnemy(40 + c*spacingX, startY + r*spacingY, 
+          r===0?'huge':r===1?'big':'medium', diff));
+        enemies.push(makeEnemy(W-40-c*spacingX, startY + r*spacingY, 
+          r===0?'huge':r===1?'big':'medium', diff));
+      }
+    }
+    return enemies;
+  }},
 ];
 
-// ─── Boss Wave Generator ────────────────────────────────────
-function generateBossWave(waveNum, diff) {
-  const enemies = [];
+// ─── Boss Wave Generators ──────────────────────────────────
+const BOSS_WAVE_TYPES = [
+  // Type 0: Single giant boss + 4 escort minions (classic)
+  { name: 'ICE TITAN', gen: (waveNum, diff) => {
+    const enemies = [];
+    const boss = createBossEnemy(W/2, 70, waveNum, diff);
+    boss.w = 70; boss.h = 64;
+    enemies.push(boss);
+    for (let i=0; i<4; i++) {
+      const side = i<2 ? -1 : 1;
+      const e = makeEnemy(W/2 + side*(50+i*30), 120 + (i%2)*55, 'medium', diff);
+      e.hp += 1;
+      enemies.push(e);
+    }
+    return enemies;
+  }},
+  // Type 1: Twin bosses side-by-side
+  { name: 'FROST KING', gen: (waveNum, diff) => {
+    const enemies = [];
+    for (let i=0; i<2; i++) {
+      const boss = createBossEnemy(W/3 + i*W/3, 60, waveNum, diff);
+      boss.w = 55; boss.h = 50;
+      boss.bossHPscale = 0.6;
+      boss.hp = Math.max(3, Math.floor(boss.hp * 0.6));
+      boss.maxHp = boss.hp;
+      boss.originalPoints = Math.floor(boss.originalPoints * 0.7);
+      enemies.push(boss);
+    }
+    // Escort row between them
+    for (let c=0; c<5; c++) {
+      const e = makeEnemy(W/2 + (c-2)*70, 130, 'big', diff);
+      e.hp += 1;
+      enemies.push(e);
+    }
+    return enemies;
+  }},
+  // Type 2: Boss with shield wall (strong minions in front)
+  { name: 'GLACIAL LORD', gen: (waveNum, diff) => {
+    const enemies = [];
+    const boss = createBossEnemy(W/2, 60, waveNum, diff);
+    boss.w = 75; boss.h = 68;
+    enemies.push(boss);
+    // Two rows of fortified minions
+    for (let r=0; r<2; r++) for (let c=0; c<7; c++) {
+      const e = makeEnemy(80 + c*100, 120 + r*60, 'big', diff);
+      e.hp += 2;
+      enemies.push(e);
+    }
+    return enemies;
+  }},
+  // Type 3: Boss rush — boss + waves of smaller enemies on sides
+  { name: 'ARCTIC EMPEROR', gen: (waveNum, diff) => {
+    const enemies = [];
+    const boss = createBossEnemy(W/2, 55, waveNum, diff);
+    boss.w = 65; boss.h = 60;
+    enemies.push(boss);
+    // Side columns of medium enemies
+    for (let r=0; r<6; r++) {
+      enemies.push(makeEnemy(50, 110 + r*50, 'medium', diff));
+      enemies.push(makeEnemy(W-50, 110 + r*50, 'medium', diff));
+    }
+    return enemies;
+  }},
+  // Type 4: Snow Doom — boss surrounded by a rotating ring of enemies
+  { name: 'SNOW DOOM', gen: (waveNum, diff) => {
+    const enemies = [];
+    const boss = createBossEnemy(W/2, 50, waveNum, diff);
+    boss.w = 80; boss.h = 72;
+    enemies.push(boss);
+    // Ring of enemies around the boss
+    for (let i=0; i<8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const radius = 100;
+      const e = makeEnemy(W/2 + Math.cos(angle)*radius, 50 + Math.sin(angle)*radius, 'medium', diff);
+      e.hp += 1;
+      enemies.push(e);
+    }
+    return enemies;
+  }},
+];
+
+function createBossEnemy(x, y, waveNum, diff) {
   const bossHP = Math.min(5 + Math.floor(waveNum / 5) * 2, 15);
-  const boss = makeEnemy(W/2, 70, 'huge', diff);
+  const boss = makeEnemy(x, y, 'huge', diff);
   boss.hp = bossHP;
   boss.maxHp = bossHP;
   boss.isBoss = true;
   boss.originalPoints = 100 + Math.floor(waveNum / 5) * 50;
-  boss.w = 70;
-  boss.h = 64;
   boss.bossDir = 1;
   boss.bossSpeed = 40 + waveNum * 2;
-  enemies.push(boss);
-
-  for (let i=0; i<4; i++) {
-    const side = i<2 ? -1 : 1;
-    const e = makeEnemy(W/2 + side*(50+i*30), 120 + (i%2)*55, 'medium', diff);
-    e.hp += 1;
-    enemies.push(e);
-  }
-  return enemies;
+  return boss;
 }
 
 function makeEnemy(x, y, sizeKey, diff) {
@@ -519,6 +633,11 @@ function resetGame() {
     comboDisplayTimer: 0,
     lastKillTime: 0,
 
+    // Wave tracking
+    waveHistory: [],
+    waveModifier: null,
+    lastBossType: -1,
+
     _menuCooldown: 0,
   };
 
@@ -546,33 +665,86 @@ function createSnowflake() {
   };
 }
 
+// ─── Wave Modifiers ─────────────────────────────────────────
+const WAVE_MODIFIERS = [
+  { name: 'FAST', desc: 'Speed +', apply: (enemies) => enemies.forEach(e => { e.bossSpeed = (e.bossSpeed || 0) + 30; }) },
+  { name: 'FORTIFIED', desc: 'Armor +', apply: (enemies) => enemies.forEach(e => { e.hp += 1; e.maxHp += 1; }) },
+  { name: 'REVERSE', desc: 'Reverse', apply: (enemies) => { /* handled in spawnWave */ } },
+  { name: 'DENSE', desc: 'More!', apply: (enemies) => {
+    // Duplicate enemies offset slightly
+    const clones = enemies.map(e => ({...e, x: e.x + 40, hp: 1, maxHp: 1, points: Math.floor(e.points/2), originalPoints: Math.floor(e.originalPoints/2)}));
+    enemies.push(...clones);
+  }},
+];
+
+function pickWaveModifier(wave) {
+  // Modifiers start appearing from wave 4, skipping boss waves
+  if (wave < 4 || wave % 5 === 0) return null;
+  if (Math.random() > 0.35) return null; // 35% chance per applicable wave
+  return WAVE_MODIFIERS[Math.floor(Math.random() * WAVE_MODIFIERS.length)];
+}
+
 function spawnWave() {
   const diff = DIFFICULTIES[currentDifficulty];
   const isBossWave = game.wave > 0 && game.wave % 5 === 0;
 
   if (isBossWave) {
-    const bossNames = ['ICE TITAN', 'FROST KING', 'GLACIAL LORD', 'ARCTIC EMPEROR', 'SNOW DOOM'];
-    const idx = Math.floor(game.wave/5) % 5 - 1;
-    const bossName = bossNames[idx >= 0 ? idx : 0] || 'FROST COLOSSUS';
-    game.waveName = '★ BOSS: ' + bossName;
-    game.enemies = generateBossWave(game.wave, diff);
+    // Pick a different boss type than last time
+    let bossType;
+    if (game.lastBossType < 0) {
+      bossType = Math.floor(Math.random() * BOSS_WAVE_TYPES.length);
+    } else {
+      do {
+        bossType = Math.floor(Math.random() * BOSS_WAVE_TYPES.length);
+      } while (bossType === game.lastBossType);
+    }
+    game.lastBossType = bossType;
+    const bossDef = BOSS_WAVE_TYPES[bossType];
+    game.waveName = '★ BOSS: ' + bossDef.name;
+    game.enemies = bossDef.gen(game.wave, diff);
     game.waveAnnounceText = '⚠ BOSS WAVE ⚠';
     game.waveAnnounceTimer = 2.5;
+    game.waveModifier = null;
     Audio.bossAppear();
   } else {
+    // Track last 2 patterns to avoid repeats
+    const history = game.waveHistory;
     let patternIndex;
     if (game.wave === 1) {
       patternIndex = 0;
     } else {
-      const lastIndex = (game.wave - 2) % WAVE_PATTERNS.length;
+      const forbidden = new Set(history);
+      let attempts = 0;
       do {
         patternIndex = Math.floor(Math.random() * WAVE_PATTERNS.length);
-      } while (patternIndex === lastIndex);
+        attempts++;
+      } while (forbidden.has(patternIndex) && attempts < 20);
     }
+
+    // Update history (keep last 2 entries)
+    history.push(patternIndex);
+    if (history.length > 2) history.shift();
+
     const pattern = WAVE_PATTERNS[patternIndex];
     game.waveName = pattern.name;
     game.enemies = pattern.gen(diff);
-    game.waveAnnounceText = 'Wave ' + game.wave + ' — ' + pattern.name;
+    game.waveModifier = pickWaveModifier(game.wave);
+
+    // Apply modifier
+    if (game.waveModifier) {
+      game.waveModifier.apply(game.enemies);
+      // Handle REVERSE: start enemies moving left instead of right
+      if (game.waveModifier.name === 'REVERSE') {
+        game.enemyDir = -1;
+      }
+      // FAST: boost global enemy speed too
+      if (game.waveModifier.name === 'FAST') {
+        game.enemySpeed *= 1.4;
+      }
+    }
+
+    game.waveAnnounceText = 'Wave ' + game.wave + ' — ' + pattern.name
+      + (game.waveModifier ? ' [' + game.waveModifier.name + ']' : '');
     game.waveAnnounceTimer = 1.5;
   }
 }
@@ -1073,6 +1245,11 @@ function drawHUD() {
   }
 
   ctx.textAlign = 'right';
+  ctx.font = '12px \"Courier New\", monospace';
+  ctx.fillStyle = autofireEnabled ? '#44ff44' : '#445';
+  ctx.fillText(autofireEnabled ? 'AUTOFIRE: ON' : 'autofire: off', W - 20, 58);
+
+  ctx.textAlign = 'right';
   ctx.font = '14px sans-serif';
   ctx.fillStyle = Audio._muted ? '#ff4444' : '#44ff44';
   ctx.fillText(Audio._muted ? '🔇' : '🔊', W - 20, H - 30);
@@ -1164,7 +1341,7 @@ function drawMenu() {
   ctx.textBaseline = 'bottom';
   ctx.fillText('← →  or  A/D  to select difficulty   ·   SPACE to play', W / 2, H - 60);
   ctx.textBaseline = 'middle';
-  ctx.fillText('Fullscreen: 1   ·   P to pause   ·   M for sound', W / 2, H - 40);
+  ctx.fillText('Fullscreen: 1   ·   P to pause   ·   M for sound   ·   Shift Autofire', W / 2, H - 40);
 }
 
 function drawPauseOverlay() {
@@ -1302,7 +1479,16 @@ function addScorePopup(x, y, points, color, size) {
 function spawnPowerUp(x, y) {
   const diff = DIFFICULTIES[currentDifficulty];
   if (Math.random() > diff.powerUpChance) return;
-  const type = POWERUP_KEYS[Math.floor(Math.random() * POWERUP_KEYS.length)];
+  // Weighted selection: nuke is much rarer than other powerups
+  const weights = { spread: 3, rapid: 3, shield: 2, life: 1, nuke: 0.15 };
+  let total = 0;
+  for (const k in weights) total += weights[k];
+  let r = Math.random() * total;
+  let type = POWERUP_KEYS[0];
+  for (const k of POWERUP_KEYS) {
+    r -= weights[k];
+    if (r <= 0) { type = k; break; }
+  }
   game.powerups.push({ x, y, type, vy: POWERUP_FALL_SPEED });
 }
 
@@ -1542,7 +1728,7 @@ function updatePlayer(dt) {
   p.x = Math.max(20, Math.min(W - 20, p.x));
 
   game.shootTimer -= dt;
-  if (keys.space && game.shootTimer <= 0) {
+  if ((keys.space || autofireEnabled) && game.shootTimer <= 0) {
     const cd = game.powerupTimers.rapid > 0 ? diff.shootCooldown * 0.45 : diff.shootCooldown;
 
     game.totalShots++;
@@ -1579,6 +1765,14 @@ function updateBullets(dt) {
   }
 }
 
+// ─── Trigger game over (extracted to avoid duplication) ─────
+function triggerGameOver() {
+  game.state = GAME_STATES.GAME_OVER;
+  Audio.stopMusic();
+  Audio.gameOver();
+  if (game.score > loadHighScore()) saveHighScore(game.score);
+}
+
 function updateEnemies(dt) {
   const diff = DIFFICULTIES[currentDifficulty];
   const aliveEnemies = game.enemies.filter(e => e.alive);
@@ -1612,14 +1806,20 @@ function updateEnemies(dt) {
     game.enemyDir *= -1;
     game.enemySpeed += 1;
     for (const e of minions) {
-      e.y += DROP_DISTANCE;
-      if (e.y + e.h / 2 >= game.player.y - 20) {
-        game.state = GAME_STATES.GAME_OVER;
-        Audio.stopMusic();
-        Audio.gameOver();
-        if (game.score > loadHighScore()) saveHighScore(game.score);
+      e.y += getDropDistance(game.wave);
+      if (e.y + e.h / 2 >= FLOOR_Y()) {
+        triggerGameOver();
         return;
       }
+    }
+  }
+
+  // ─── Universal floor check: any enemy reaching the floor triggers
+  //      instant game over, regardless of how they got there.
+  for (const e of aliveEnemies) {
+    if (e.y + e.h / 2 >= FLOOR_Y()) {
+      triggerGameOver();
+      return;
     }
   }
 
@@ -1854,6 +2054,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (e.key === '1') { toggleFullscreen(); e.preventDefault(); }
+  if (e.code === 'ShiftLeft' && !e.repeat) {
+    autofireEnabled = !autofireEnabled;
+    e.preventDefault();
+  }
   if (e.key === 'Escape' && game.state === GAME_STATES.GAME_OVER) {
     game.state = GAME_STATES.MENU;
     Audio.stopMusic();
