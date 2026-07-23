@@ -93,9 +93,9 @@
     padding: 0;
   }
   .game-container:fullscreen canvas {
-    max-width: 100vw; max-height: 100vh;
-    width: auto; height: auto;
-    object-fit: contain;
+    width: 100vw !important;
+    height: 100vh !important;
+    display: block;
   }
   .game-container:fullscreen .controls,
   .game-container:fullscreen .instructions,
@@ -123,6 +123,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const W = 800, H = 600;
+let renderScale = 1;
 
 // ─── Key State ───────────────────────────────────────────────
 const keys = { left: false, right: false, space: false };
@@ -1140,7 +1141,16 @@ function updateEnemies(dt) {
 // ─── Render ──────────────────────────────────────────────────
 
 function render() {
-  ctx.clearRect(0, 0, W, H);
+  // Reset to pixel-space for clear and letterbox
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#080820';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Scale game coordinates to canvas
+  const ox = (canvas.width - W * renderScale) / 2;
+  const oy = (canvas.height - H * renderScale) / 2;
+  ctx.setTransform(renderScale, 0, 0, renderScale, ox, oy);
 
   // Background
   const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -1347,10 +1357,15 @@ function resizeCanvas() {
   if (document.fullscreenElement) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const scale = Math.min(vw / W, vh / H);
-    canvas.style.width = (W * scale) + 'px';
-    canvas.style.height = (H * scale) + 'px';
+    canvas.width = vw;
+    canvas.height = vh;
+    renderScale = Math.min(vw / W, vh / H);
+    canvas.style.width = '';
+    canvas.style.height = '';
   } else {
+    canvas.width = W;
+    canvas.height = H;
+    renderScale = 1;
     canvas.style.width = '';
     canvas.style.height = '';
   }
