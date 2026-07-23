@@ -134,6 +134,13 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { keys.left = true; e.preventDefault(); }
   if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { keys.right = true; e.preventDefault(); }
   if (e.key === ' ') { keys.space = true; e.preventDefault(); }
+  // Start music on game start (inside user gesture for autoplay policy)
+  if (e.key === ' ' && game.state === GAME_STATES.MENU) {
+    Audio.startMusic();
+  }
+  if (e.key === ' ' && game.state === GAME_STATES.GAME_OVER) {
+    Audio.startMusic();
+  }
 }, { passive: false });
 document.addEventListener('keyup', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { keys.left = false; e.preventDefault(); }
@@ -1166,7 +1173,6 @@ function update(dt) {
     if (keys.space) {
       resetGame();
       game.state = GAME_STATES.PLAYING;
-      Audio.startMusic();
     }
     updateSnowflakes(cappedDt);
     updateStars(cappedDt);
@@ -1176,7 +1182,6 @@ function update(dt) {
   if (game.state === GAME_STATES.GAME_OVER) {
     if (keys.space) {
       resetGame();
-      Audio.startMusic();
     }
     updateSnowflakes(cappedDt);
     updateParticles(cappedDt);
