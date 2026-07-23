@@ -127,12 +127,17 @@ let renderScale = 1;
 
 // ─── Key State ───────────────────────────────────────────────
 const keys = { left: false, right: false, space: false };
+let spaceJustPressed = false; // edge-triggered: true only on the frame space goes down
 
 function handleKey(e, pressed) {
   const k = e.key;
   if (k === 'ArrowLeft' || k === 'a' || k === 'A') { keys.left = pressed; e.preventDefault(); }
   if (k === 'ArrowRight' || k === 'd' || k === 'D') { keys.right = pressed; e.preventDefault(); }
-  if (k === ' ') { keys.space = pressed; e.preventDefault(); }
+  if (k === ' ') {
+    if (pressed && !keys.space) spaceJustPressed = true; // rising edge only
+    keys.space = pressed;
+    e.preventDefault();
+  }
   if (k === ' ' && pressed && game.state === GAME_STATES.MENU) Audio.startMusic();
   if (k === ' ' && pressed && game.state === GAME_STATES.GAME_OVER) Audio.startMusic();
 }
@@ -195,7 +200,7 @@ const Audio = {
     this._sfxGain.gain.value = 0.5;
     this._sfxGain.connect(master);
     this._musicGain = this._ctx.createGain();
-    this._musicGain.gain.value = 0.15;
+    this._musicGain.gain.value = 0.25;
     this._musicGain.connect(master);
   },
   _ensure() {
@@ -309,7 +314,7 @@ const Audio = {
       this._musicSrc = src;
     } catch (e) {
       // Fallback (e.g. createMediaElementSource unavailable): play element directly.
-      el.volume = 0.4;
+      el.volume = 0.65;
     }
     el.addEventListener('canplaythrough', () => { this._musicReady = true; }, { once: true });
     el.addEventListener('error', (e) => { console.warn('Music load error:', el.src, e); });
@@ -1330,15 +1335,17 @@ function updatePowerUps(dt) {
   const p = game.player;
   for (let i = game.powerups.length - 1; i >= 0; i--) {
     const pu = game.powerups[i];
-    // Power-up magnet: gently drift toward player when close
+    // Power-ups always fall at full speed; the magnet only adds a
+    // horizontal drift toward the player when close, so they never
+    // stall hovering above the player.
+    pu.y += pu.vy * dt;
     const dx = p.x - pu.x;
     const dy = p.y - pu.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 100) {
-      pu.x += dx * 0.8 * dt;
-      pu.y += dy * 0.8 * dt - pu.vy * dt * 0.5; // slow fall when attracted
-    } else {
-      pu.y += pu.vy * dt;
+    if (dist < 100 && dist > 1) {
+      // Normalized horizontal pull, capped so it stays a gentle drift.
+      const pull = (dx / dist) * 90 * dt;
+      pu.x += Math.abs(pull) > Math.abs(dx) ? dx : pull;
     }
     if (pu.y > H + 20) game.powerups.splice(i, 1);
   }
@@ -1743,14 +1750,14 @@ function update(dt) {
       game._menuCooldown -= cappedDt;
       if (game._menuCooldown < 0) game._menuCooldown = 0;
     }
-    if (keys.space) { resetGame(); game.state = GAME_STATES.PLAYING; }
+    if (spaceJustPressed) { resetGame(); game.state = GAME_STATES.PLAYING; }
     updateSnowflakes(cappedDt);
     updateStars(cappedDt);
     return;
   }
 
   if (game.state === GAME_STATES.GAME_OVER) {
-    if (keys.space) resetGame();
+    if (spaceJustPressed) resetGame();
     updateSnowflakes(cappedDt);
     updateParticles(cappedDt);
     updateExplosionRings(cappedDt);
@@ -1792,6 +1799,9 @@ function update(dt) {
     game.screenShake -= cappedDt;
     if (game.screenShake < 0) game.screenShake = 0;
   }
+
+  // Clear edge-triggered flags at end of frame
+  spaceJustPressed = false;
 }
 
 // ─── Game Loop ──────────────────────────────────────────────
