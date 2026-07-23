@@ -356,8 +356,16 @@ function createSnowflake() {
 
 function spawnWave() {
   const diff = DIFFICULTIES[currentDifficulty];
-  // Pick pattern cycling through available ones
-  const patternIndex = (game.wave - 1) % WAVE_PATTERNS.length;
+  // Pick a random pattern, never the same one twice in a row
+  let patternIndex;
+  if (game.wave === 1) {
+    patternIndex = 0; // Always start with THE WALL
+  } else {
+    const lastIndex = (game.wave - 2) % WAVE_PATTERNS.length;
+    do {
+      patternIndex = Math.floor(Math.random() * WAVE_PATTERNS.length);
+    } while (patternIndex === lastIndex);
+  }
   const pattern = WAVE_PATTERNS[patternIndex];
   game.waveName = pattern.name;
   game.enemies = pattern.gen(diff);
