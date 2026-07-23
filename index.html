@@ -116,7 +116,11 @@
     <button class="btn fullscreen-btn" id="fullscreenBtn">⛶ Fullscreen</button>
     <button class="btn" id="muteBtn" title="Toggle sound (M key)">🔊</button>
   </div>
+  <p style="color:#445;font-size:10px;margin-top:6px;letter-spacing:1px">Music: "Deep Space" by Jason Shaw (audionautix.com) CC BY 4.0</p>
 </div>
+<audio id="bgMusic" loop preload="auto" crossorigin="anonymous">
+  <source src="https://audionautix.com/Music/DeepSpace.mp3" type="audio/mpeg">
+</audio>
 <script>
 "use strict";
 
@@ -188,8 +192,7 @@ const BEAR_SIZES = {
 
 // ─── Audio Manager (Web Audio API) ──────────────────────────
 const Audio = {
-  _ctx: null, _musicGain: null, _sfxGain: null,
-  _musicOn: false, _musicIdx: 0, _musicTimeout: null, _muted: false,
+  _ctx: null, _sfxGain: null, _musicEl: null, _muted: false,
 
   init() {
     this._ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -199,16 +202,15 @@ const Audio = {
     this._sfxGain = this._ctx.createGain();
     this._sfxGain.gain.value = 0.5;
     this._sfxGain.connect(master);
-    this._musicGain = this._ctx.createGain();
-    this._musicGain.gain.value = 0.12;
-    this._musicGain.connect(master);
+    // Preload background music
+    this._musicEl = document.getElementById('bgMusic');
   },
   _ensure() {
     if (!this._ctx) this.init();
     if (this._ctx.state === 'suspended') this._ctx.resume();
   },
 
-  // --- SFX ---
+  // --- SFX (unchanged) ---
   shoot() {
     if (this._muted) return;
     this._ensure();
@@ -268,38 +270,20 @@ const Audio = {
     });
   },
 
-  // --- Music ---
-  _notes: [
-    {f:330,d:0.2},{f:392,d:0.2},{f:440,d:0.25},{f:392,d:0.2},
-    {f:330,d:0.2},{f:294,d:0.2},{f:262,d:0.25},{f:294,d:0.2},
-    {f:330,d:0.18},{f:392,d:0.18},{f:440,d:0.18},{f:523,d:0.25},
-    {f:440,d:0.18},{f:392,d:0.18},{f:330,d:0.18},{f:262,d:0.3},
-  ],
+  // --- Background Music (online stream) ---
   startMusic() {
-    this._ensure();
-    if (this._muted) return;
-    this.stopMusic();
-    this._musicOn = true;
-    this._musicIdx = 0;
-    this._playNextNote();
-  },
-  _playNextNote() {
-    if (!this._musicOn || !this._ctx) return;
-    const n = this._notes[this._musicIdx], c = this._ctx, t = c.currentTime;
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = 'square'; o.frequency.value = n.f;
-    g.gain.setValueAtTime(0.15,t); g.gain.exponentialRampToValueAtTime(0.001,t+n.d*0.9);
-    o.connect(g); g.connect(this._musicGain); o.start(t); o.stop(t+n.d);
-    this._musicIdx = (this._musicIdx + 1) % this._notes.length;
-    this._musicTimeout = setTimeout(() => this._playNextNote(), n.d*1000+40);
+    if (!this._musicEl) this._musicEl = document.getElementById('bgMusic');
+    if (!this._musicEl) return;
+    this._musicEl.volume = this._muted ? 0 : 0.3;
+    this._musicEl.currentTime = 0;
+    this._musicEl.play().catch(() => {});
   },
   stopMusic() {
-    this._musicOn = false;
-    if (this._musicTimeout) { clearTimeout(this._musicTimeout); this._musicTimeout = null; }
+    if (this._musicEl) { this._musicEl.pause(); this._musicEl.currentTime = 0; }
   },
   toggleMute() {
     this._muted = !this._muted;
-    if (this._muted) this.stopMusic();
+    if (this._musicEl) this._musicEl.volume = this._muted ? 0 : 0.3;
     return this._muted;
   }
 };
