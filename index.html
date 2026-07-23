@@ -108,7 +108,7 @@
 <div class="game-container">
   <h1>🐧 Penguin Invaders</h1>
   <canvas id="gameCanvas" width="800" height="600" tabindex="0"></canvas>
-  <p class="instructions">⟵/→ or A/D Move &nbsp;|&nbsp; Space Shoot &nbsp;|&nbsp; P Pause &nbsp;|&nbsp; F Fullscreen &nbsp;|&nbsp; M Sound</p>
+  <p class="instructions">⟵/→ or A/D Move &nbsp;|&nbsp; Space Shoot &nbsp;|&nbsp; P Pause &nbsp;|&nbsp; 1 Fullscreen &nbsp;|&nbsp; M Sound</p>
   <div class="controls">
     <button class="btn" data-diff="easy" id="diffEasy">Easy</button>
     <button class="btn active" data-diff="medium" id="diffMedium">Medium</button>
@@ -1164,7 +1164,7 @@ function drawMenu() {
   ctx.textBaseline = 'bottom';
   ctx.fillText('← →  or  A/D  to select difficulty   ·   SPACE to play', W / 2, H - 60);
   ctx.textBaseline = 'middle';
-  ctx.fillText('F or ⛶ button for fullscreen   ·   P to pause   ·   M for sound', W / 2, H - 40);
+  ctx.fillText('Fullscreen: 1   ·   P to pause   ·   M for sound', W / 2, H - 40);
 }
 
 function drawPauseOverlay() {
@@ -1853,7 +1853,7 @@ document.addEventListener('keydown', (e) => {
     if (game.state === GAME_STATES.PAUSED) Audio.stopMusic(); else Audio.startMusic();
     e.preventDefault();
   }
-  if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); e.preventDefault(); }
+  if (e.key === '1') { toggleFullscreen(); e.preventDefault(); }
   if (e.key === 'Escape' && game.state === GAME_STATES.GAME_OVER) {
     game.state = GAME_STATES.MENU;
     Audio.stopMusic();
