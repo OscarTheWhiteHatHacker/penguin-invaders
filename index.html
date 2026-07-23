@@ -183,7 +183,8 @@ function saveHighScore(score) {
 // ─── Audio Manager (Web Audio API) ──────────────────────────
 const Audio = {
   _ctx: null, _sfxGain: null, _musicGain: null, _muted: false,
-  _musicOn: false, _musicTimeout: null, _musicStep: 0, _bassNote: 0,
+  _musicOn: false, _musicEl: null, _musicSrc: null, _musicReady: false,
+  _musicUrl: 'assets/music/new_background_music.mp3',
 
   init() {
     this._ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -292,69 +293,45 @@ const Audio = {
     o.connect(g); g.connect(this._sfxGain); o.start(t); o.stop(t+0.08);
   },
 
-  // --- Arcade Chiptune Music ---
-  _melody: [
-    440,523,659,784, 880,784,659,523,
-    440,523,659,784, 659,523,440,392,
-    349,440,523,659, 784,659,523,440,
-    415,523,659,831, 880,784,659,523,
-  ],
-  _bass: [110,110,147,147,175,175,208,208],
-
-  _playStep() {
-    if (!this._musicOn || !this._ctx) return;
-    const c = this._ctx, t = c.currentTime;
-    const step = this._musicStep;
-    const beat = step % 16;
-
-    const mf = this._melody[step % this._melody.length];
-    if (mf) {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = 'square'; o.frequency.value = mf;
-      g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.09);
-      o.connect(g); g.connect(this._musicGain); o.start(t); o.stop(t+0.09);
+  // --- Background Music (MP3 file, routed through Web Audio gain) ---
+  _loadMusic() {
+    if (this._musicEl) return;
+    // NB: this object shadows window.Audio, so use createElement.
+    const el = document.createElement('audio');
+    el.src = this._musicUrl;
+    el.loop = true;             // seamless loop
+    el.preload = 'auto';
+    el.crossOrigin = 'anonymous';
+    this._musicEl = el;
+    try {
+      const src = this._ctx.createMediaElementSource(el);
+      src.connect(this._musicGain);
+      this._musicSrc = src;
+    } catch (e) {
+      // Fallback (e.g. createMediaElementSource unavailable): play element directly.
+      el.volume = 0.4;
     }
-
-    if (step % 8 === 0) {
-      const bf = this._bass[this._bassNote % this._bass.length];
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = 'triangle'; o.frequency.value = bf;
-      g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.25);
-      o.connect(g); g.connect(this._musicGain); o.start(t); o.stop(t+0.3);
-      this._bassNote++;
-    }
-
-    if (beat === 0 || beat === 8) {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(40,t+0.1);
-      g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.12);
-      o.connect(g); g.connect(this._musicGain); o.start(t); o.stop(t+0.12);
-    } else if (beat === 4 || beat === 12) {
-      const buf = c.createBuffer(1, c.sampleRate*0.08, c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i=0; i<d.length; i++) d[i] = (Math.random()*2-1) * Math.exp(-i/(c.sampleRate*0.02));
-      const src = c.createBufferSource(); src.buffer = buf;
-      const g = c.createGain(); g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.08);
-      const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 2000;
-      src.connect(f); f.connect(g); g.connect(this._musicGain); src.start(t); src.stop(t+0.08);
-    }
-
-    this._musicStep = (step + 1) % 128;
-    this._musicTimeout = setTimeout(() => this._playStep(), 95);
+    el.addEventListener('canplaythrough', () => { this._musicReady = true; }, { once: true });
+    el.addEventListener('error', (e) => { console.warn('Music load error:', el.src, e); });
+    el.load();
   },
 
   startMusic() {
     if (this._muted) return;
     this.stopMusic();
     this._ensure();
+    this._loadMusic();
     this._musicOn = true;
-    this._musicStep = 0;
-    this._bassNote = 0;
-    this._playStep();
+    const el = this._musicEl;
+    el.currentTime = 0;
+    const p = el.play();
+    if (p && p.catch) p.catch(err => console.warn('Music play failed:', err));
   },
   stopMusic() {
     this._musicOn = false;
-    if (this._musicTimeout) { clearTimeout(this._musicTimeout); this._musicTimeout = null; }
+    if (this._musicEl) {
+      try { this._musicEl.pause(); } catch (e) {}
+    }
   },
   toggleMute() {
     this._muted = !this._muted;
