@@ -1781,7 +1781,11 @@ function updateEnemies(dt) {
     Audio.waveComplete();
     game.wave++;
     game.enemyBullets = [];
-    game.enemySpeed = diff.bearBaseSpeed + game.wave * diff.waveSpeedBonus;
+    // Enemy speed scales with wave, with diminishing returns after wave 10
+    // to prevent impossible speeds in late waves (unbounded linear scaling made
+    // waves 15+ unplayable on medium/hard, especially with FAST modifier).
+    const speedWave = game.wave <= 10 ? game.wave : 10 + (game.wave - 10) * 0.30;
+    game.enemySpeed = Math.round(diff.bearBaseSpeed + speedWave * diff.waveSpeedBonus);
     spawnWave();
     return;
   }
