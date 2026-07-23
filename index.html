@@ -133,7 +133,6 @@ function handleKey(e, pressed) {
   if (k === 'ArrowLeft' || k === 'a' || k === 'A') { keys.left = pressed; e.preventDefault(); }
   if (k === 'ArrowRight' || k === 'd' || k === 'D') { keys.right = pressed; e.preventDefault(); }
   if (k === ' ') { keys.space = pressed; e.preventDefault(); }
-  // Start music on user gesture for autoplay policy
   if (k === ' ' && pressed && game.state === GAME_STATES.MENU) Audio.startMusic();
   if (k === ' ' && pressed && game.state === GAME_STATES.GAME_OVER) Audio.startMusic();
 }
@@ -163,7 +162,6 @@ const BEAR_SIZES = {
   medium:{ w:35, h:32, hp:1, points:10, colorOffset:0 }
 };
 
-// ─── Power-up Types ─────────────────────────────────────────
 const POWERUP_TYPES = {
   spread: { color:'#ff44ff', symbol:'⍟', label:'SPREAD', duration:6 },
   rapid:  { color:'#44ff44', symbol:'⚡', label:'RAPID', duration:5 },
@@ -175,7 +173,6 @@ const POWERUP_KEYS = Object.keys(POWERUP_TYPES);
 const POWERUP_FALL_SPEED = 60;
 const POWERUP_SIZE = 18;
 
-// ─── High Score (localStorage) ──────────────────────────────
 function loadHighScore() {
   try { return parseInt(localStorage.getItem('pi_highScore')) || 0; } catch(e) { return 0; }
 }
@@ -467,7 +464,6 @@ function generateBossWave(waveNum, diff) {
   boss.bossSpeed = 40 + waveNum * 2;
   enemies.push(boss);
 
-  // Minions flank the boss
   for (let i=0; i<4; i++) {
     const side = i<2 ? -1 : 1;
     const e = makeEnemy(W/2 + side*(50+i*30), 120 + (i%2)*55, 'medium', diff);
@@ -518,41 +514,45 @@ function resetGame() {
     shakeIntensity: 0,
     difficulty: currentDifficulty,
 
+    // Polish effects
+    muzzleFlashes: [],
+    explosionRings: [],
+    screenFlash: 0,
+    dangerFlash: 0,
+
+    // Stats
+    totalKills: 0,
+    totalShots: 0,
+    totalPowerups: 0,
+    maxCombo: 0,
+
     // Power-up state
     powerupTimers: { spread: 0, rapid: 0 },
     hasShield: false,
 
-    // Combo system
+    // Combo
     combo: 0,
     comboCount: 0,
     comboTimer: 0,
     comboDisplayTimer: 0,
     lastKillTime: 0,
 
-    // Menu
     _menuCooldown: 0,
   };
 
-  // Stars
   for (let i = 0; i < 100; i++) {
     game.stars.push({
-      x: Math.random() * W,
-      y: Math.random() * H * 0.7,
-      r: Math.random() * 1.5 + 0.5,
-      speed: Math.random() * 0.3 + 0.1,
+      x: Math.random() * W, y: Math.random() * H * 0.7,
+      r: Math.random() * 1.5 + 0.5, speed: Math.random() * 0.3 + 0.1,
       brightness: Math.random() * 0.5 + 0.5
     });
   }
 
-  // Snowflakes
   for (let i = 0; i < 30; i++) {
     game.snowflakes.push(createSnowflake());
   }
 
-  // Player
   game.player = { x: W / 2, y: H - 50, invulnTimer: 0 };
-
-  // Enemies
   spawnWave();
 }
 
@@ -569,7 +569,9 @@ function spawnWave() {
   const isBossWave = game.wave > 0 && game.wave % 5 === 0;
 
   if (isBossWave) {
-    const bossName = ['ICE TITAN', 'FROST KING', 'GLACIAL LORD', 'ARCTIC EMPEROR', 'SNOW DOOM'][Math.floor(game.wave/5)%5 - 1 || 0] || 'FROST COLOSSUS';
+    const bossNames = ['ICE TITAN', 'FROST KING', 'GLACIAL LORD', 'ARCTIC EMPEROR', 'SNOW DOOM'];
+    const idx = Math.floor(game.wave/5) % 5 - 1;
+    const bossName = bossNames[idx >= 0 ? idx : 0] || 'FROST COLOSSUS';
     game.waveName = '★ BOSS: ' + bossName;
     game.enemies = generateBossWave(game.wave, diff);
     game.waveAnnounceText = '⚠ BOSS WAVE ⚠';
@@ -598,7 +600,6 @@ function spawnWave() {
 function drawPenguin(px, py, flash) {
   if (flash && Math.floor(Date.now() / 100) % 2 === 0) return;
 
-  // Shield glow
   if (game.hasShield) {
     ctx.save();
     ctx.shadowColor = '#44aaff';
@@ -611,31 +612,26 @@ function drawPenguin(px, py, flash) {
     ctx.restore();
   }
 
-  // Body
   ctx.fillStyle = '#1a1a2e';
   ctx.beginPath();
   ctx.ellipse(px, py + 5, 18, 22, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // White belly
   ctx.fillStyle = '#e8e8f0';
   ctx.beginPath();
   ctx.ellipse(px, py + 8, 11, 16, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Head
   ctx.fillStyle = '#1a1a2e';
   ctx.beginPath();
   ctx.arc(px, py - 12, 12, 0, Math.PI * 2);
   ctx.fill();
 
-  // White face
   ctx.fillStyle = '#e8e8f0';
   ctx.beginPath();
   ctx.arc(px, py - 13, 8, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eyes (look in movement direction)
   ctx.fillStyle = '#111';
   ctx.beginPath();
   ctx.arc(px - 4, py - 15, 2, 0, Math.PI * 2);
@@ -644,7 +640,6 @@ function drawPenguin(px, py, flash) {
   ctx.arc(px + 4, py - 15, 2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eye shine
   ctx.fillStyle = '#fff';
   ctx.beginPath();
   ctx.arc(px - 3, py - 16, 0.8, 0, Math.PI * 2);
@@ -653,7 +648,6 @@ function drawPenguin(px, py, flash) {
   ctx.arc(px + 5, py - 16, 0.8, 0, Math.PI * 2);
   ctx.fill();
 
-  // Beak
   ctx.fillStyle = '#ff8800';
   ctx.beginPath();
   ctx.moveTo(px - 3, py - 10);
@@ -662,7 +656,6 @@ function drawPenguin(px, py, flash) {
   ctx.closePath();
   ctx.fill();
 
-  // Feet
   ctx.fillStyle = '#ff8800';
   ctx.beginPath();
   ctx.ellipse(px - 8, py + 24, 6, 3, 0.3, 0, Math.PI * 2);
@@ -671,7 +664,6 @@ function drawPenguin(px, py, flash) {
   ctx.ellipse(px + 8, py + 24, 6, 3, -0.3, 0, Math.PI * 2);
   ctx.fill();
 
-  // Turret
   ctx.fillStyle = '#555';
   ctx.fillRect(px - 3, py - 30, 6, 10);
   ctx.fillStyle = '#777';
@@ -679,7 +671,6 @@ function drawPenguin(px, py, flash) {
   ctx.fillStyle = '#ffaa00';
   ctx.fillRect(px - 1, py - 38, 2, 3);
 
-  // Flippers
   ctx.fillStyle = '#1a1a2e';
   ctx.beginPath();
   ctx.ellipse(px - 20, py + 5, 5, 12, -0.2, 0, Math.PI * 2);
@@ -694,7 +685,6 @@ function drawPolarBear(e) {
   const hue = 40 - e.colorOffset * 0.5;
   const baseColor = `hsl(${hue}, 15%, ${85 + e.colorOffset * 0.5}%)`;
 
-  // Boss glow
   if (e.isBoss) {
     ctx.save();
     ctx.shadowColor = '#ff4444';
@@ -705,18 +695,15 @@ function drawPolarBear(e) {
     ctx.shadowBlur = 20;
   }
 
-  // Body
   ctx.fillStyle = baseColor;
   ctx.beginPath();
   ctx.ellipse(x, y, w * 0.42, h * 0.42, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Head
   ctx.beginPath();
   ctx.arc(x, y - h * 0.28, w * 0.24, 0, Math.PI * 2);
   ctx.fill();
 
-  // Ears
   ctx.beginPath();
   ctx.arc(x - w * 0.2, y - h * 0.38, w * 0.08, 0, Math.PI * 2);
   ctx.fill();
@@ -724,7 +711,6 @@ function drawPolarBear(e) {
   ctx.arc(x + w * 0.2, y - h * 0.38, w * 0.08, 0, Math.PI * 2);
   ctx.fill();
 
-  // Inner ears
   ctx.fillStyle = `hsl(${hue + 10}, 20%, 75%)`;
   ctx.beginPath();
   ctx.arc(x - w * 0.2, y - h * 0.38, w * 0.04, 0, Math.PI * 2);
@@ -733,19 +719,16 @@ function drawPolarBear(e) {
   ctx.arc(x + w * 0.2, y - h * 0.38, w * 0.04, 0, Math.PI * 2);
   ctx.fill();
 
-  // Muzzle
   ctx.fillStyle = `hsl(${hue}, 10%, 93%)`;
   ctx.beginPath();
   ctx.ellipse(x, y - h * 0.22, w * 0.14, h * 0.08, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Nose
   ctx.fillStyle = '#222';
   ctx.beginPath();
   ctx.arc(x, y - h * 0.24, w * 0.04, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eyes - red for boss
   ctx.fillStyle = e.isBoss ? '#ff2222' : '#111';
   ctx.beginPath();
   ctx.arc(x - w * 0.1, y - h * 0.32, w * 0.03, 0, Math.PI * 2);
@@ -754,7 +737,6 @@ function drawPolarBear(e) {
   ctx.arc(x + w * 0.1, y - h * 0.32, w * 0.03, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eye shine
   ctx.fillStyle = '#fff';
   ctx.beginPath();
   ctx.arc(x - w * 0.08, y - h * 0.33, w * 0.012, 0, Math.PI * 2);
@@ -763,7 +745,6 @@ function drawPolarBear(e) {
   ctx.arc(x + w * 0.12, y - h * 0.33, w * 0.012, 0, Math.PI * 2);
   ctx.fill();
 
-  // Boss crown
   if (e.isBoss) {
     ctx.fillStyle = '#ffaa00';
     const cx = x, cy = y - h * 0.46;
@@ -780,7 +761,6 @@ function drawPolarBear(e) {
     ctx.fill();
   }
 
-  // Legs
   ctx.fillStyle = baseColor;
   ctx.beginPath();
   ctx.ellipse(x - w * 0.18, y + h * 0.36, w * 0.1, h * 0.06, 0, 0, Math.PI * 2);
@@ -791,7 +771,6 @@ function drawPolarBear(e) {
 
   if (e.isBoss || e.hitFlash > 0) ctx.restore();
 
-  // HP bar
   if (e.maxHp > 1) {
     const barW = w * 0.7;
     const barH = e.isBoss ? 6 : 4;
@@ -805,8 +784,15 @@ function drawPolarBear(e) {
 }
 
 function drawBullet(b) {
+  // Fading trail
+  ctx.globalAlpha = b.trailAlpha || 0.3;
+  ctx.fillStyle = '#ffdd44';
+  ctx.fillRect(b.x - 1, b.y - 6, 2, b.trailLen || 8);
+  ctx.globalAlpha = 1;
+
+  // Bright core
   ctx.shadowColor = '#ff4';
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = 12;
   ctx.fillStyle = '#ffdd44';
   ctx.fillRect(b.x - 2, b.y - 6, 4, 12);
   ctx.fillStyle = '#fff';
@@ -835,31 +821,69 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function drawMuzzleFlashes() {
+  for (let i = game.muzzleFlashes.length - 1; i >= 0; i--) {
+    const f = game.muzzleFlashes[i];
+    const progress = 1 - f.life / f.maxLife;
+    const radius = 3 + 8 * progress;
+    const alpha = 1 - progress;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = '#ffaa00';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffdd44';
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, radius * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawExplosionRings() {
+  for (const r of game.explosionRings) {
+    const progress = 1 - r.life / r.maxLife;
+    const radius = r.maxRadius * progress;
+    const alpha = 1 - progress;
+
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = 3 * (1 - progress);
+    ctx.shadowColor = r.color;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function drawPowerUps() {
   for (const pu of game.powerups) {
     const type = POWERUP_TYPES[pu.type];
     const bob = Math.sin(pu.y * 0.1 + Date.now() * 0.003) * 3;
     const px = pu.x, py = pu.y + bob;
 
-    // Glow
     ctx.save();
     ctx.shadowColor = type.color;
     ctx.shadowBlur = 15;
 
-    // Background circle
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.beginPath();
     ctx.arc(px, py, POWERUP_SIZE/2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ring
     ctx.strokeStyle = type.color;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(px, py, POWERUP_SIZE/2 - 1, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Symbol
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 14px "Courier New", monospace';
@@ -875,7 +899,11 @@ function drawScorePopups() {
     ctx.globalAlpha = sp.alpha;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 16px "Courier New", monospace';
+    ctx.font = 'bold ' + (sp.size || 16) + 'px "Courier New", monospace';
+    ctx.fillStyle = sp.color;
+    // Small shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillText(sp.text, sp.x + 1, sp.y + 1);
     ctx.fillStyle = sp.color;
     ctx.fillText(sp.text, sp.x, sp.y);
   }
@@ -885,24 +913,20 @@ function drawScorePopups() {
 function drawComboDisplay() {
   if (game.comboDisplayTimer <= 0 || game.combo < 2) return;
 
-  const x = W / 2;
-  const y = 90;
   const scale = 1 + Math.sin(Date.now() * 0.01) * 0.1;
 
   ctx.save();
-  ctx.translate(x, y);
+  ctx.translate(W/2, 90);
   ctx.scale(scale, scale);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Combo number
   ctx.font = 'bold 32px "Courier New", monospace';
   ctx.fillStyle = '#ffaa00';
   ctx.shadowColor = '#ffaa00';
   ctx.shadowBlur = 20;
   ctx.fillText(game.combo + 'x COMBO!', 0, 0);
 
-  // Multiplier
   ctx.shadowBlur = 0;
   ctx.font = '14px "Courier New", monospace';
   const mult = getComboMultiplier();
@@ -916,20 +940,17 @@ function drawWaveAnnouncement() {
   if (game.waveAnnounceTimer <= 0) return;
 
   const total = game.wave % 5 === 0 && game.state === GAME_STATES.PLAYING ? 2.5 : 1.5;
-  // t goes from 1 (just spawned) down to 0 (expired)
   const t = Math.max(0, game.waveAnnounceTimer / total);
   let alpha = 1;
   let scale = 1;
 
   if (t > 0.85) {
-    // Scale in during first 15% of the animation
-    const p = (t - 0.85) / 0.15; // 1 → 0
-    scale = 1 - 0.7 * p; // 0.3 → 1
+    const p = (t - 0.85) / 0.15;
+    scale = 1 - 0.7 * p;
   } else if (t < 0.25) {
-    // Fade out + slight scale-up during last 25%
-    const p = t / 0.25; // 1 → 0
-    alpha = p; // 1 → 0
-    scale = 1 + 0.5 * (1 - p); // 1 → 1.5
+    const p = t / 0.25;
+    alpha = p;
+    scale = 1 + 0.5 * (1 - p);
   }
 
   ctx.save();
@@ -979,6 +1000,43 @@ function drawStars() {
   ctx.globalAlpha = 1;
 }
 
+function drawDangerBorder() {
+  // Find the lowest alive enemy
+  let lowestY = 0;
+  for (const e of game.enemies) {
+    if (e.alive && e.y + e.h/2 > lowestY) lowestY = e.y + e.h/2;
+  }
+
+  if (lowestY < H * 0.55) return; // Safe
+
+  const dangerLevel = Math.min(1, (lowestY - H * 0.55) / (H * 0.25));
+  const pulse = Math.sin(Date.now() * 0.005) * 0.3 + 0.7;
+  const alpha = dangerLevel * pulse * 0.4;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Red border overlay
+  const grad = ctx.createRadialGradient(W/2, H/2, 200, W/2, H/2, 400);
+  grad.addColorStop(0, 'rgba(255,0,0,0)');
+  grad.addColorStop(0.7, 'rgba(255,0,0,0)');
+  grad.addColorStop(1, 'rgba(255,0,0,1)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.restore();
+}
+
+function drawScreenFlash() {
+  if (game.screenFlash <= 0) return;
+  const alpha = game.screenFlash * 0.4;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
 function drawHUD() {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
@@ -987,17 +1045,15 @@ function drawHUD() {
   ctx.shadowBlur = 4;
 
   ctx.fillStyle = '#fff';
-  ctx.fillText('Score: ' + game.score, 20, 20);
+  ctx.fillText('Score: ' + game.score.toLocaleString(), 20, 20);
   ctx.textAlign = 'right';
   ctx.fillText('Wave ' + game.wave, W - 20, 20);
 
-  // High score
   ctx.textAlign = 'center';
   ctx.font = '12px "Courier New", monospace';
   ctx.fillStyle = '#ffaa00';
-  ctx.fillText('HI: ' + game.highScore, W/2, 20);
+  ctx.fillText('HI: ' + game.highScore.toLocaleString(), W/2, 20);
 
-  // Wave name
   if (game.waveName && game.waveAnnounceTimer <= 0) {
     ctx.textAlign = 'right';
     ctx.font = '12px "Courier New", monospace';
@@ -1005,13 +1061,11 @@ function drawHUD() {
     ctx.fillText('◈ ' + game.waveName + ' ◈', W - 20, 44);
   }
 
-  // Difficulty badge
   ctx.textAlign = 'center';
   ctx.font = '12px "Courier New", monospace';
   ctx.fillStyle = '#667';
   ctx.fillText(DIFFICULTIES[currentDifficulty].label.toUpperCase(), W / 2, 34);
 
-  // Lives
   ctx.textAlign = 'left';
   ctx.font = '18px sans-serif';
   ctx.fillStyle = '#ff4444';
@@ -1019,7 +1073,6 @@ function drawHUD() {
     ctx.fillText('♥', 20 + i * 26, H - 30);
   }
 
-  // Power-up indicators
   if (game.powerupTimers.spread > 0 || game.powerupTimers.rapid > 0) {
     let puStr = '';
     if (game.powerupTimers.spread > 0) puStr += '⍟SPREAD ' + game.powerupTimers.spread.toFixed(1) + 's ';
@@ -1030,7 +1083,6 @@ function drawHUD() {
     ctx.fillText(puStr, 20, 50);
   }
 
-  // Shield indicator
   if (game.hasShield) {
     ctx.textAlign = 'left';
     ctx.font = '12px "Courier New", monospace';
@@ -1038,7 +1090,6 @@ function drawHUD() {
     ctx.fillText('◈ SHIELD', 20, game.powerupTimers.spread > 0 || game.powerupTimers.rapid > 0 ? 64 : 50);
   }
 
-  // Sound indicator
   ctx.textAlign = 'right';
   ctx.font = '14px sans-serif';
   ctx.fillStyle = Audio._muted ? '#ff4444' : '#44ff44';
@@ -1068,12 +1119,11 @@ function drawMenu() {
   ctx.fillStyle = '#667';
   ctx.fillText('Select difficulty and press SPACE to start', W / 2, H * 0.36);
 
-  // High score
   const hs = loadHighScore();
   if (hs > 0) {
     ctx.font = '16px "Courier New", monospace';
     ctx.fillStyle = '#ffaa00';
-    ctx.fillText('🏆 High Score: ' + hs, W / 2, H * 0.32);
+    ctx.fillText('🏆 High Score: ' + hs.toLocaleString(), W / 2, H * 0.32);
   }
 
   const difficulties = ['easy', 'medium', 'hard'];
@@ -1154,7 +1204,7 @@ function drawPauseOverlay() {
 }
 
 function drawGameOver() {
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
   ctx.fillRect(0, 0, W, H);
 
   ctx.textAlign = 'center';
@@ -1164,36 +1214,53 @@ function drawGameOver() {
   ctx.shadowBlur = 30;
   ctx.font = 'bold 52px "Courier New", monospace';
   ctx.fillStyle = '#ff4444';
-  ctx.fillText('GAME OVER', W / 2, H * 0.3);
+  ctx.fillText('GAME OVER', W / 2, H * 0.24);
   ctx.shadowBlur = 0;
 
-  ctx.font = '28px "Courier New", monospace';
-  ctx.fillStyle = '#fff';
-  ctx.fillText('Final Score: ' + game.score, W / 2, H * 0.42);
-
-  // High score
   const hs = loadHighScore();
   if (game.score >= hs && game.score > 0) {
     ctx.font = 'bold 20px "Courier New", monospace';
     ctx.fillStyle = '#ffaa00';
     ctx.shadowColor = '#ffaa00';
     ctx.shadowBlur = 15;
-    ctx.fillText('🏆 NEW HIGH SCORE! 🏆', W / 2, H * 0.38);
+    ctx.fillText('🏆 NEW HIGH SCORE! 🏆', W / 2, H * 0.32);
     ctx.shadowBlur = 0;
-  } else {
-    ctx.font = '14px "Courier New", monospace';
-    ctx.fillStyle = '#ffaa00';
-    ctx.fillText('High Score: ' + hs, W / 2, H * 0.50);
   }
 
-  ctx.font = '16px "Courier New", monospace';
-  ctx.fillStyle = '#ffaa00';
-  ctx.fillText('Wave: ' + game.wave + '  •  Difficulty: ' + DIFFICULTIES[currentDifficulty].label, W / 2, H * 0.57);
+  ctx.font = '28px "Courier New", monospace';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('Final Score: ' + game.score.toLocaleString(), W / 2, H * 0.39);
+
+  if (game.score < hs) {
+    ctx.font = '13px "Courier New", monospace';
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText('High Score: ' + hs.toLocaleString(), W / 2, H * 0.455);
+  }
+
+  // Stats panel
+  const statsY = H * 0.50;
+  ctx.font = '14px "Courier New", monospace';
+  ctx.fillStyle = '#aabbcc';
+  ctx.fillText('—  Stats  —', W / 2, statsY);
+
+  ctx.font = '12px "Courier New", monospace';
+  ctx.fillStyle = '#8899aa';
+  const lines = [
+    'Wave: ' + game.wave,
+    'Kills: ' + game.totalKills,
+    'Shots: ' + game.totalShots,
+    'Best Combo: ' + game.maxCombo + 'x',
+    'Power-ups: ' + game.totalPowerups,
+    'Difficulty: ' + DIFFICULTIES[currentDifficulty].label,
+  ];
+  lines.forEach((line, i) => {
+    ctx.fillText(line, W / 2, statsY + 20 + i * 18);
+  });
 
   ctx.font = '18px "Courier New", monospace';
   ctx.fillStyle = '#8899aa';
-  ctx.fillText('Press SPACE to Restart', W / 2, H * 0.67);
-  ctx.fillText('Press ESC for Menu', W / 2, H * 0.73);
+  ctx.fillText('Press SPACE to Restart', W / 2, H * 0.82);
+  ctx.fillText('Press ESC for Menu', W / 2, H * 0.88);
 }
 
 // ─── Update Functions ───────────────────────────────────────
@@ -1203,33 +1270,33 @@ function spawnParticles(x, y, count, color, life) {
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 120 + 40;
     game.particles.push({
-      x, y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: life || 0.6,
-      alpha: 1,
-      size: Math.random() * 3 + 1.5,
-      color: color || '#ffdd44'
+      x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+      life: life || 0.6, alpha: 1,
+      size: Math.random() * 3 + 1.5, color: color || '#ffdd44'
     });
   }
 }
 
+function spawnExplosionRing(x, y, color, maxRadius) {
+  game.explosionRings.push({
+    x, y, life: 0.5, maxLife: 0.5, maxRadius: maxRadius || 60, color: color || '#ffdd44'
+  });
+}
+
 function spawnBossExplosion(e) {
-  // Big dramatic explosion for bosses
   for (let i = 0; i < 30; i++) {
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 200 + 80;
     const colors = ['#ff4444', '#ffaa00', '#ffdd44', '#fff', '#ff8800'];
     game.particles.push({
-      x: e.x, y: e.y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: Math.random() * 0.8 + 0.4,
-      alpha: 1,
+      x: e.x, y: e.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+      life: Math.random() * 0.8 + 0.4, alpha: 1,
       size: Math.random() * 5 + 2,
       color: colors[Math.floor(Math.random() * colors.length)]
     });
   }
+  spawnExplosionRing(e.x, e.y, '#ff4444', 120);
+  spawnExplosionRing(e.x, e.y, '#ffaa00', 100);
   game.screenShake = 0.5;
   game.shakeIntensity = 15;
 }
@@ -1242,21 +1309,17 @@ function getComboMultiplier() {
   return 1;
 }
 
-function addScorePopup(x, y, points, color) {
+function addScorePopup(x, y, points, color, size) {
   game.scorePopups.push({
-    x, y,
-    vy: -60,
-    text: '+' + points,
-    alpha: 1,
-    life: 0.8,
-    color: color || '#fff'
+    x, y, vy: -60, text: '+' + points,
+    alpha: 1, life: 0.8, color: color || '#fff',
+    size: size || 16
   });
 }
 
 function spawnPowerUp(x, y) {
   const diff = DIFFICULTIES[currentDifficulty];
   if (Math.random() > diff.powerUpChance) return;
-
   const type = POWERUP_KEYS[Math.floor(Math.random() * POWERUP_KEYS.length)];
   game.powerups.push({ x, y, type, vy: POWERUP_FALL_SPEED });
 }
@@ -1264,33 +1327,47 @@ function spawnPowerUp(x, y) {
 function updateParticles(dt) {
   for (let i = game.particles.length - 1; i >= 0; i--) {
     const p = game.particles[i];
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
     p.life -= dt;
     p.alpha = Math.max(0, p.life / 0.6);
     p.size *= (1 - dt * 0.5);
-    if (p.life <= 0 || p.alpha <= 0) {
-      game.particles.splice(i, 1);
-    }
+    if (p.life <= 0 || p.alpha <= 0) game.particles.splice(i, 1);
+  }
+}
+
+function updateMuzzleFlashes(dt) {
+  for (let i = game.muzzleFlashes.length - 1; i >= 0; i--) {
+    game.muzzleFlashes[i].life -= dt;
+    if (game.muzzleFlashes[i].life <= 0) game.muzzleFlashes.splice(i, 1);
+  }
+}
+
+function updateExplosionRings(dt) {
+  for (let i = game.explosionRings.length - 1; i >= 0; i--) {
+    game.explosionRings[i].life -= dt;
+    if (game.explosionRings[i].life <= 0) game.explosionRings.splice(i, 1);
   }
 }
 
 function updatePowerUps(dt) {
+  const p = game.player;
   for (let i = game.powerups.length - 1; i >= 0; i--) {
     const pu = game.powerups[i];
-    pu.y += pu.vy * dt;
-    if (pu.y > H + 20) {
-      game.powerups.splice(i, 1);
+    // Power-up magnet: gently drift toward player when close
+    const dx = p.x - pu.x;
+    const dy = p.y - pu.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 100) {
+      pu.x += dx * 0.8 * dt;
+      pu.y += dy * 0.8 * dt - pu.vy * dt * 0.5; // slow fall when attracted
+    } else {
+      pu.y += pu.vy * dt;
     }
+    if (pu.y > H + 20) game.powerups.splice(i, 1);
   }
 
-  // Decay power-up timers
-  if (game.powerupTimers.spread > 0) {
-    game.powerupTimers.spread = Math.max(0, game.powerupTimers.spread - dt);
-  }
-  if (game.powerupTimers.rapid > 0) {
-    game.powerupTimers.rapid = Math.max(0, game.powerupTimers.rapid - dt);
-  }
+  if (game.powerupTimers.spread > 0) game.powerupTimers.spread = Math.max(0, game.powerupTimers.spread - dt);
+  if (game.powerupTimers.rapid > 0) game.powerupTimers.rapid = Math.max(0, game.powerupTimers.rapid - dt);
 }
 
 function updateScorePopups(dt) {
@@ -1299,23 +1376,16 @@ function updateScorePopups(dt) {
     sp.y += sp.vy * dt;
     sp.life -= dt;
     sp.alpha = Math.max(0, sp.life / 0.8);
-    if (sp.life <= 0) {
-      game.scorePopups.splice(i, 1);
-    }
+    if (sp.life <= 0) game.scorePopups.splice(i, 1);
   }
 }
 
 function updateCombo(dt) {
   if (game.comboTimer > 0) {
     game.comboTimer -= dt;
-    if (game.comboTimer <= 0) {
-      game.combo = 0;
-      game.comboCount = 0;
-    }
+    if (game.comboTimer <= 0) { game.combo = 0; game.comboCount = 0; }
   }
-  if (game.comboDisplayTimer > 0) {
-    game.comboDisplayTimer -= dt;
-  }
+  if (game.comboDisplayTimer > 0) game.comboDisplayTimer -= dt;
 }
 
 function updateSnowflakes(dt) {
@@ -1336,7 +1406,6 @@ function updateStars(dt) {
 }
 
 function checkBulletCollisions() {
-  const diff = DIFFICULTIES[currentDifficulty];
   for (let bi = game.bullets.length - 1; bi >= 0; bi--) {
     const b = game.bullets[bi];
     for (let ei = game.enemies.length - 1; ei >= 0; ei--) {
@@ -1350,20 +1419,19 @@ function checkBulletCollisions() {
 
         if (e.hp > 0) {
           Audio.enemyHit();
-          // Shrink to next size
           const sizes = ['huge', 'big', 'medium'];
           const idx = sizes.indexOf(e.sizeKey);
           if (idx < sizes.length - 1) {
             e.sizeKey = sizes[idx + 1];
             const newSz = BEAR_SIZES[e.sizeKey];
-            e.w = newSz.w;
-            e.h = newSz.h;
+            e.w = newSz.w; e.h = newSz.h;
           }
           spawnParticles(e.x, e.y, 6, '#ffdd44', 0.6);
+          spawnExplosionRing(e.x, e.y, '#ffdd44', 35);
         } else {
           e.alive = false;
+          game.totalKills++;
 
-          // Combo
           const now = performance.now() / 1000;
           if (now - game.lastKillTime < 1.5 && game.lastKillTime > 0) {
             game.combo++;
@@ -1377,22 +1445,25 @@ function checkBulletCollisions() {
           }
           game.lastKillTime = now;
           game.comboTimer = 1.5;
+          if (game.combo > game.maxCombo) game.maxCombo = game.combo;
 
           const mult = getComboMultiplier();
           const points = Math.round(e.originalPoints * mult);
           game.score += points;
 
           Audio.enemyKill();
-          addScorePopup(e.x, e.y - 20, points, mult > 1 ? '#ffaa00' : '#ffdd44');
+          const popColor = mult > 1 ? '#ffaa00' : '#ffdd44';
+          const popSize = mult > 1 ? 20 : 16;
+          addScorePopup(e.x, e.y - 20, points, popColor, popSize);
 
           if (e.isBoss) {
             spawnBossExplosion(e);
             Audio.nuke();
           } else {
             spawnParticles(e.x, e.y, 12, '#ffdd44', 1.2);
+            spawnExplosionRing(e.x, e.y, '#ffdd44', 50);
           }
 
-          // Power-up drop chance
           spawnPowerUp(e.x, e.y);
         }
         break;
@@ -1407,18 +1478,12 @@ function checkPowerUpCollisions() {
     const pu = game.powerups[i];
     const dx = pu.x - p.x;
     const dy = pu.y - p.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 30) {
+    if (dx * dx + dy * dy < 900) { // dist < 30
       const type = POWERUP_TYPES[pu.type];
       if (type.instant) {
-        // Instant effect
         switch (pu.type) {
-          case 'shield':
-            game.hasShield = true;
-            break;
-          case 'life':
-            game.lives++;
-            break;
+          case 'shield': game.hasShield = true; break;
+          case 'life': game.lives++; break;
           case 'nuke':
             Audio.nuke();
             game.screenShake = 0.4;
@@ -1426,18 +1491,20 @@ function checkPowerUpCollisions() {
             for (const e of game.enemies) {
               if (e.alive) {
                 e.alive = false;
+                game.totalKills++;
                 game.score += e.originalPoints;
                 spawnParticles(e.x, e.y, 10, '#ffaa00', 0.8);
+                spawnExplosionRing(e.x, e.y, '#ffaa00', 40);
               }
             }
             break;
         }
       } else {
-        // Timed power-up
         game.powerupTimers[pu.type] = (type.duration || 5);
       }
       Audio.powerUp();
       game.powerups.splice(i, 1);
+      game.totalPowerups++;
       addScorePopup(pu.x, pu.y - 10, type.label, type.color);
     }
   }
@@ -1453,7 +1520,6 @@ function checkEnemyBulletCollisions() {
         b.y > p.y - 25 && b.y < p.y + 25) {
       game.enemyBullets.splice(bi, 1);
 
-      // Shield absorbs one hit
       if (game.hasShield) {
         game.hasShield = false;
         spawnParticles(p.x, p.y, 15, '#44aaff', 0.8);
@@ -1471,7 +1537,6 @@ function checkEnemyBulletCollisions() {
         game.state = GAME_STATES.GAME_OVER;
         Audio.stopMusic();
         Audio.gameOver();
-        // Save high score
         if (game.score > loadHighScore()) {
           saveHighScore(game.score);
           game.highScore = game.score;
@@ -1496,14 +1561,19 @@ function updatePlayer(dt) {
   if (keys.space && game.shootTimer <= 0) {
     const cd = game.powerupTimers.rapid > 0 ? diff.shootCooldown * 0.45 : diff.shootCooldown;
 
+    game.totalShots++;
+
     if (game.powerupTimers.spread > 0) {
-      // Spread shot: 3 bullets
-      game.bullets.push({ x: p.x, y: p.y - 38, vx: 0 });
-      game.bullets.push({ x: p.x - 10, y: p.y - 35, vx: -60 });
-      game.bullets.push({ x: p.x + 10, y: p.y - 35, vx: 60 });
+      game.bullets.push({ x: p.x, y: p.y - 38, vx: 0, trailLen: 10, trailAlpha: 0.4 });
+      game.bullets.push({ x: p.x - 10, y: p.y - 35, vx: -60, trailLen: 8, trailAlpha: 0.3 });
+      game.bullets.push({ x: p.x + 10, y: p.y - 35, vx: 60, trailLen: 8, trailAlpha: 0.3 });
     } else {
-      game.bullets.push({ x: p.x, y: p.y - 38, vx: 0 });
+      game.bullets.push({ x: p.x, y: p.y - 38, vx: 0, trailLen: 10, trailAlpha: 0.4 });
     }
+
+    // Muzzle flash
+    game.muzzleFlashes.push({ x: p.x, y: p.y - 40, life: 0.08, maxLife: 0.08 });
+
     Audio.shoot();
     game.shootTimer = cd;
   }
@@ -1512,7 +1582,7 @@ function updatePlayer(dt) {
 function updateBullets(dt) {
   for (const b of game.bullets) {
     b.y -= BULLET_SPEED * dt;
-    if (b.vx) b.x += b.vx * dt; // Spread bullets drift
+    if (b.vx) b.x += b.vx * dt;
   }
   for (const b of game.enemyBullets) {
     b.y += ENEMY_BULLET_SPEED * dt;
@@ -1529,6 +1599,7 @@ function updateEnemies(dt) {
   const diff = DIFFICULTIES[currentDifficulty];
   const aliveEnemies = game.enemies.filter(e => e.alive);
   if (aliveEnemies.length === 0) {
+    game.screenFlash = 0.15;
     Audio.waveComplete();
     game.wave++;
     game.enemyBullets = [];
@@ -1539,26 +1610,18 @@ function updateEnemies(dt) {
 
   let hitEdge = false;
 
-  // Boss enemies move differently
   const bosses = aliveEnemies.filter(e => e.isBoss);
   const minions = aliveEnemies.filter(e => !e.isBoss);
 
-  // Update bosses
   for (const e of bosses) {
     e.x += e.bossSpeed * e.bossDir * dt;
-    if (e.x - e.w / 2 < 30 || e.x + e.w / 2 > W - 30) {
-      e.bossDir *= -1;
-    }
-    // Boss slowly descends
+    if (e.x - e.w / 2 < 30 || e.x + e.w / 2 > W - 30) e.bossDir *= -1;
     if (e.y < 100) e.y += 10 * dt;
   }
 
-  // Update minions (classic Space Invaders movement)
   for (const e of minions) {
     e.x += game.enemySpeed * game.enemyDir * dt;
-    if (e.x - e.w / 2 < 10 || e.x + e.w / 2 > W - 10) {
-      hitEdge = true;
-    }
+    if (e.x - e.w / 2 < 10 || e.x + e.w / 2 > W - 10) hitEdge = true;
   }
 
   if (hitEdge) {
@@ -1576,29 +1639,23 @@ function updateEnemies(dt) {
     }
   }
 
-  // Hit flash decay
   for (const e of aliveEnemies) {
     if (e.hitFlash > 0) e.hitFlash -= dt;
   }
 
-  // Bottom-row shooting (minions)
   const bottomRow = {};
   for (const e of minions) {
     const colKey = Math.round(e.x / 75);
-    if (!bottomRow[colKey] || e.y > bottomRow[colKey].y) {
-      bottomRow[colKey] = e;
-    }
+    if (!bottomRow[colKey] || e.y > bottomRow[colKey].y) bottomRow[colKey] = e;
   }
 
   const fireRate = diff.enemyFireRate * (1 + game.wave * 0.05);
   for (const colKey in bottomRow) {
-    const e = bottomRow[colKey];
     if (Math.random() < fireRate) {
-      game.enemyBullets.push({ x: e.x, y: e.y + e.h / 2, w: 6, h: 10 });
+      game.enemyBullets.push({ x: bottomRow[colKey].x, y: bottomRow[colKey].y + bottomRow[colKey].h / 2, w: 6, h: 10 });
     }
   }
 
-  // Boss shooting (faster, aimed)
   for (const e of bosses) {
     if (Math.random() < fireRate * 3) {
       game.enemyBullets.push({ x: e.x, y: e.y + e.h / 2 + 10, w: 8, h: 14 });
@@ -1628,13 +1685,11 @@ function render() {
   // Screen shake
   if (game.screenShake > 0) {
     const intensity = game.shakeIntensity * (game.screenShake / 0.3);
-    const shakeX = (Math.random() - 0.5) * intensity;
-    const shakeY = (Math.random() - 0.5) * intensity;
     ctx.save();
-    ctx.translate(shakeX, shakeY);
+    ctx.translate((Math.random()-0.5)*intensity, (Math.random()-0.5)*intensity);
   }
 
-  // Menu state
+  // Menu
   if (game.state === GAME_STATES.MENU) {
     drawStars();
     drawSnowflakes();
@@ -1643,32 +1698,36 @@ function render() {
     return;
   }
 
+  // Screen flash on wave clear
+  drawScreenFlash();
+
   drawStars();
   drawSnowflakes();
   drawParticles();
+  drawMuzzleFlashes();
+  drawExplosionRings();
   drawPowerUps();
   drawScorePopups();
 
-  // Draw enemies
   for (const e of game.enemies) {
     if (e.alive) drawPolarBear(e);
   }
 
-  // Draw player
   if (game.state === GAME_STATES.PLAYING || game.state === GAME_STATES.PAUSED) {
-    const flash = game.player.invulnTimer > 0;
-    drawPenguin(game.player.x, game.player.y, flash);
+    drawPenguin(game.player.x, game.player.y, game.player.invulnTimer > 0);
   }
 
-  // Draw bullets
   for (const b of game.bullets) drawBullet(b);
   for (const b of game.enemyBullets) drawEnemyBullet(b);
+
+  // Danger border when enemies get too low
+  if (game.state === GAME_STATES.PLAYING) drawDangerBorder();
 
   drawHUD();
   drawComboDisplay();
   drawWaveAnnouncement();
 
-  // Pause overlay
+  // Pause
   if (game.state === GAME_STATES.PAUSED) {
     if (game.screenShake > 0) ctx.restore();
     drawPauseOverlay();
@@ -1707,25 +1766,20 @@ function update(dt) {
       game._menuCooldown -= cappedDt;
       if (game._menuCooldown < 0) game._menuCooldown = 0;
     }
-    if (keys.space) {
-      resetGame();
-      game.state = GAME_STATES.PLAYING;
-    }
+    if (keys.space) { resetGame(); game.state = GAME_STATES.PLAYING; }
     updateSnowflakes(cappedDt);
     updateStars(cappedDt);
     return;
   }
 
   if (game.state === GAME_STATES.GAME_OVER) {
-    if (keys.space) {
-      resetGame();
-    }
+    if (keys.space) resetGame();
     updateSnowflakes(cappedDt);
     updateParticles(cappedDt);
+    updateExplosionRings(cappedDt);
     return;
   }
 
-  // Pause / Unpause
   if (game.state === GAME_STATES.PAUSED) {
     updateSnowflakes(cappedDt);
     updateStars(cappedDt);
@@ -1739,16 +1793,22 @@ function update(dt) {
   checkEnemyBulletCollisions();
   checkPowerUpCollisions();
   updateParticles(cappedDt);
+  updateMuzzleFlashes(cappedDt);
+  updateExplosionRings(cappedDt);
   updatePowerUps(cappedDt);
   updateScorePopups(cappedDt);
   updateCombo(cappedDt);
   updateSnowflakes(cappedDt);
   updateStars(cappedDt);
 
-  // Wave announcement timer
   if (game.waveAnnounceTimer > 0) {
     game.waveAnnounceTimer -= cappedDt;
     if (game.waveAnnounceTimer < 0) game.waveAnnounceTimer = 0;
+  }
+
+  if (game.screenFlash > 0) {
+    game.screenFlash -= cappedDt * 2;
+    if (game.screenFlash < 0) game.screenFlash = 0;
   }
 
   if (game.screenShake > 0) {
@@ -1763,10 +1823,8 @@ let lastTime = 0;
 function gameLoop(timestamp) {
   const dt = (timestamp - lastTime) / 1000;
   lastTime = timestamp;
-
   update(dt);
   render();
-
   requestAnimationFrame(gameLoop);
 }
 
@@ -1797,34 +1855,28 @@ document.getElementById('muteBtn').addEventListener('click', () => {
   document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
 });
 
-// M key mute toggle
 document.addEventListener('keydown', (e) => {
   if (e.key === 'm' || e.key === 'M') {
     const muted = Audio.toggleMute();
     document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
     e.preventDefault();
   }
-  // P key pause/resume
   if ((e.key === 'p' || e.key === 'P') && (game.state === GAME_STATES.PLAYING || game.state === GAME_STATES.PAUSED)) {
     game.state = game.state === GAME_STATES.PLAYING ? GAME_STATES.PAUSED : GAME_STATES.PLAYING;
     if (game.state === GAME_STATES.PAUSED) Audio.stopMusic(); else Audio.startMusic();
     e.preventDefault();
   }
-  // F key fullscreen
   if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); e.preventDefault(); }
-  // ESC from game over back to menu
   if (e.key === 'Escape' && game.state === GAME_STATES.GAME_OVER) {
     game.state = GAME_STATES.MENU;
     Audio.stopMusic();
   }
 });
 
-// ─── Start ──────────────────────────────────────────────────
 resetGame();
 game.state = GAME_STATES.MENU;
 requestAnimationFrame(gameLoop);
 
-// ─── Fullscreen resize ─────────────────────────────────────
 function resizeCanvas() {
   if (document.fullscreenElement) {
     const vw = window.innerWidth;
