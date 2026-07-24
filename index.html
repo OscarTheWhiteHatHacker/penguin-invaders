@@ -439,7 +439,7 @@ function saveHighScore(score) {
 const Audio = {
   _ctx: null, _sfxGain: null, _musicGain: null, _muted: false,
   _musicOn: false, _musicEl: null, _musicSrc: null, _musicReady: false,
-  _musicUrl: 'new_background_music.mp3',
+  _musicUrl: 'https://raw.githubusercontent.com/OscarTheWhiteHatHacker/penguin-invaders/master/new_background_music.mp3',
 
   init() {
     this._ctx = new (window.AudioContext || window.webkitAudioContext)();
