@@ -759,42 +759,7 @@ const BOSS_WAVE_TYPES = [
     return enemies;  // 1 + 2 + 4 + 4 = 11
   }},
 
-  // ─── Type 1: FROST KING — "Twin Monarchs" ────────────────
-  // Two smaller bosses on opposite sides of the screen, each
-  // flanked by bodyguards, with a crescent of minions bridging
-  // them. The player must split attention between both sides.
-  { name: 'FROST KING', gen: (waveNum, diff) => {
-    const enemies = [];
-    for (const x of [W / 4, 3 * W / 4]) {
-      const boss = createBossEnemy(x, 50, waveNum, diff);
-      boss.w = 52; boss.h = 48;
-      boss.bossHPscale = 0.65;
-      boss.hp = Math.max(3, Math.floor(boss.hp * 0.65));
-      boss.maxHp = boss.hp;
-      boss.originalPoints = Math.floor(boss.originalPoints * 0.7);
-      enemies.push(boss);
-
-      // Bodyguards flanking each king
-      for (const dx of [-65, 65]) {
-        const e = makeEnemy(x + dx, 105, 'big', diff);
-        e.hp += 2;
-        enemies.push(e);
-      }
-    }
-
-    // Crescent bridge between the two sides
-    for (let i = 0; i < 5; i++) {
-      const t = (i / 4) * Math.PI;               // 0 → π
-      const cx = W / 4 + (i / 4) * (W / 2);      // W/4 → 3W/4
-      const cy = 135 + Math.sin(t) * 35;          // arc
-      const e = makeEnemy(cx, cy, 'medium', diff);
-      e.hp += 1;
-      enemies.push(e);
-    }
-    return enemies;  // 2 + (2*2) + 5 = 11
-  }},
-
-  // ─── Type 2: GLACIAL LORD — "The Shield Wall" ────────────
+  // ─── Type 1: GLACIAL LORD — "The Shield Wall" ────────────
   // One heavily-armoured boss behind a staggered brick wall of
   // fortified big enemies. The wall blocks shots — the player
   // must carve a path through the shield to reach the boss.
@@ -823,7 +788,7 @@ const BOSS_WAVE_TYPES = [
     return enemies;  // 1 + (5+4+3) = 13
   }},
 
-  // ─── Type 3: ARCTIC EMPEROR — "The Imperial Court" ───────
+  // ─── Type 2: ARCTIC EMPEROR — "The Imperial Court" ───────
   // The emperor sits at centre with an honour guard and a
   // V-formation of courtiers pointing toward the player.
   // Ceremonial but deadly — the V channels the player's
@@ -859,7 +824,7 @@ const BOSS_WAVE_TYPES = [
     return enemies;  // 1 + 2 + (2+2+1) = 8
   }},
 
-  // ─── Type 4: SNOW DOOM — "Doom Ring" ─────────────────────
+  // ─── Type 3: SNOW DOOM — "Doom Ring" ─────────────────────
   // A massive boss encircled by two concentric rings of enemies
   // like a snowflake mandala. The outer ring spreads wide; the
   // inner ring shields the boss. Dense but patterned — find the
