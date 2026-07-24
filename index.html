@@ -556,7 +556,6 @@ const Audio = {
     el.src = this._musicUrl;
     el.loop = true;             // seamless loop
     el.preload = 'auto';
-    el.crossOrigin = 'anonymous';
     this._musicEl = el;
     try {
       const src = this._ctx.createMediaElementSource(el);
