@@ -3,7 +3,8 @@ const CACHE_NAME = 'pi-cache-v1';
 
 const STATIC_ASSETS = [
   './',
-  './index.html'
+  './index.html',
+  './new_background_music.mp3'
 ];
 
 // ─── Install: precache the app shell & static assets ─────────
