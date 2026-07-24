@@ -724,85 +724,179 @@ const WAVE_PATTERNS = [
 
 // ─── Boss Wave Generators ──────────────────────────────────
 const BOSS_WAVE_TYPES = [
-  // Type 0: Single giant boss + 4 escort minions (classic)
+  // ─── Type 0: ICE TITAN — "The Colossus" ──────────────────
+  // A single massive boss with a cross-shaped escort. The
+  // vertical spine and horizontal arms mean the player must
+  // pick a flank to clear before focusing the boss.
   { name: 'ICE TITAN', gen: (waveNum, diff) => {
     const enemies = [];
-    const boss = createBossEnemy(W/2, 70, waveNum, diff);
-    boss.w = 70; boss.h = 64;
+    const boss = createBossEnemy(W/2, 50, waveNum, diff);
+    boss.w = 76; boss.h = 68;
     enemies.push(boss);
-    for (let i=0; i<4; i++) {
-      const side = i<2 ? -1 : 1;
-      const e = makeEnemy(W/2 + side*(50+i*30), 120 + (i%2)*55, 'medium', diff);
+
+    // Shoulder guards — big enemies flanking the boss
+    for (const dx of [-70, 70]) {
+      const e = makeEnemy(W/2 + dx, 95, 'big', diff);
       e.hp += 1;
       enemies.push(e);
     }
-    return enemies;
+
+    // Vertical spine — medium enemies below the boss
+    for (let r = 0; r < 4; r++) {
+      const e = makeEnemy(W/2, 130 + r * 45, 'medium', diff);
+      e.hp += 1;
+      enemies.push(e);
+    }
+
+    // Horizontal arms — medium enemies spreading outward
+    for (const side of [-1, 1]) {
+      for (let c = 1; c <= 2; c++) {
+        const e = makeEnemy(W/2 + side * c * 55, 150, 'medium', diff);
+        e.hp += 1;
+        enemies.push(e);
+      }
+    }
+    return enemies;  // 1 + 2 + 4 + 4 = 11
   }},
-  // Type 1: Twin bosses side-by-side
+
+  // ─── Type 1: FROST KING — "Twin Monarchs" ────────────────
+  // Two smaller bosses on opposite sides of the screen, each
+  // flanked by bodyguards, with a crescent of minions bridging
+  // them. The player must split attention between both sides.
   { name: 'FROST KING', gen: (waveNum, diff) => {
     const enemies = [];
-    for (let i=0; i<2; i++) {
-      const boss = createBossEnemy(W/3 + i*W/3, 60, waveNum, diff);
-      boss.w = 55; boss.h = 50;
-      boss.bossHPscale = 0.6;
-      boss.hp = Math.max(3, Math.floor(boss.hp * 0.6));
+    for (const x of [W / 4, 3 * W / 4]) {
+      const boss = createBossEnemy(x, 50, waveNum, diff);
+      boss.w = 52; boss.h = 48;
+      boss.bossHPscale = 0.65;
+      boss.hp = Math.max(3, Math.floor(boss.hp * 0.65));
       boss.maxHp = boss.hp;
       boss.originalPoints = Math.floor(boss.originalPoints * 0.7);
       enemies.push(boss);
+
+      // Bodyguards flanking each king
+      for (const dx of [-65, 65]) {
+        const e = makeEnemy(x + dx, 105, 'big', diff);
+        e.hp += 2;
+        enemies.push(e);
+      }
     }
-    // Escort row between them
-    for (let c=0; c<5; c++) {
-      const e = makeEnemy(W/2 + (c-2)*70, 130, 'big', diff);
+
+    // Crescent bridge between the two sides
+    for (let i = 0; i < 5; i++) {
+      const t = (i / 4) * Math.PI;               // 0 → π
+      const cx = W / 4 + (i / 4) * (W / 2);      // W/4 → 3W/4
+      const cy = 135 + Math.sin(t) * 35;          // arc
+      const e = makeEnemy(cx, cy, 'medium', diff);
       e.hp += 1;
       enemies.push(e);
     }
-    return enemies;
+    return enemies;  // 2 + (2*2) + 5 = 11
   }},
-  // Type 2: Boss with shield wall (strong minions in front)
-  // Speed reduced because this wave has 14 fortified minions — far more
-  // enemies than any other boss wave, making it disproportionately hard.
+
+  // ─── Type 2: GLACIAL LORD — "The Shield Wall" ────────────
+  // One heavily-armoured boss behind a staggered brick wall of
+  // fortified big enemies. The wall blocks shots — the player
+  // must carve a path through the shield to reach the boss.
   { name: 'GLACIAL LORD', gen: (waveNum, diff) => {
     const enemies = [];
-    const boss = createBossEnemy(W/2, 60, waveNum, diff);
-    boss.w = 75; boss.h = 68;
+    const boss = createBossEnemy(W/2, 45, waveNum, diff);
+    boss.w = 80; boss.h = 72;
     boss.bossSpeed = Math.floor(boss.bossSpeed * 0.5);
+    boss.hp = Math.min(5 + Math.floor(waveNum / 4) * 2, 18);  // extra resilient
+    boss.maxHp = boss.hp;
     enemies.push(boss);
-    // Two rows of fortified minions
-    for (let r=0; r<2; r++) for (let c=0; c<7; c++) {
-      const e = makeEnemy(80 + c*100, 120 + r*60, 'big', diff);
+
+    // Staggered shield wall — 3 rows, offset for brick pattern
+    const rowConfigs = [
+      { y: 110, count: 5, startX: 100, spacing: 150 },
+      { y: 160, count: 4, startX: 175, spacing: 150 },
+      { y: 210, count: 3, startX: 125, spacing: 200 },
+    ];
+    for (const row of rowConfigs) {
+      for (let c = 0; c < row.count; c++) {
+        const e = makeEnemy(row.startX + c * row.spacing, row.y, 'big', diff);
+        e.hp += 2;
+        enemies.push(e);
+      }
+    }
+    return enemies;  // 1 + (5+4+3) = 13
+  }},
+
+  // ─── Type 3: ARCTIC EMPEROR — "The Imperial Court" ───────
+  // The emperor sits at centre with an honour guard and a
+  // V-formation of courtiers pointing toward the player.
+  // Ceremonial but deadly — the V channels the player's
+  // shots toward the emperor.
+  { name: 'ARCTIC EMPEROR', gen: (waveNum, diff) => {
+    const enemies = [];
+    const boss = createBossEnemy(W/2, 48, waveNum, diff);
+    boss.w = 78; boss.h = 70;
+    boss.hp = Math.floor(boss.hp * 1.25);
+    boss.maxHp = boss.hp;
+    enemies.push(boss);
+
+    // Imperial guard — 2 elite big enemies
+    for (const dx of [-95, 95]) {
+      const e = makeEnemy(W/2 + dx, 95, 'big', diff);
       e.hp += 2;
       enemies.push(e);
     }
-    return enemies;
-  }},
-  // Type 3: Boss rush — boss + waves of smaller enemies on sides
-  { name: 'ARCTIC EMPEROR', gen: (waveNum, diff) => {
-    const enemies = [];
-    const boss = createBossEnemy(W/2, 55, waveNum, diff);
-    boss.w = 65; boss.h = 60;
-    enemies.push(boss);
-    // Side columns of medium enemies
-    for (let r=0; r<6; r++) {
-      enemies.push(makeEnemy(50, 110 + r*38, 'medium', diff));
-      enemies.push(makeEnemy(W-50, 110 + r*38, 'medium', diff));
+
+    // Courtiers in a V-formation
+    const vRows = [
+      { y: 140, offsets: [-65, 65] },
+      { y: 185, offsets: [-40, 40] },
+      { y: 230, offsets: [0] },
+    ];
+    for (const row of vRows) {
+      for (const dx of row.offsets) {
+        const e = makeEnemy(W/2 + dx, row.y, 'medium', diff);
+        e.hp += 1;
+        enemies.push(e);
+      }
     }
-    return enemies;
+    return enemies;  // 1 + 2 + (2+2+1) = 8
   }},
-  // Type 4: Snow Doom — boss surrounded by a rotating ring of enemies
+
+  // ─── Type 4: SNOW DOOM — "Doom Ring" ─────────────────────
+  // A massive boss encircled by two concentric rings of enemies
+  // like a snowflake mandala. The outer ring spreads wide; the
+  // inner ring shields the boss. Dense but patterned — find the
+  // gaps.
   { name: 'SNOW DOOM', gen: (waveNum, diff) => {
     const enemies = [];
-    const boss = createBossEnemy(W/2, 50, waveNum, diff);
-    boss.w = 80; boss.h = 72;
+    const boss = createBossEnemy(W/2, 48, waveNum, diff);
+    boss.w = 82; boss.h = 74;
+    boss.bossSpeed = Math.floor(boss.bossSpeed * 0.7);
     enemies.push(boss);
-    // Ring of enemies around the boss
-    for (let i=0; i<8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
-      const radius = 100;
-      const e = makeEnemy(W/2 + Math.cos(angle)*radius, 50 + Math.sin(angle)*radius, 'medium', diff);
+
+    // Inner ring — 6 medium enemies
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      const rx = 75, ry = 55;
+      const e = makeEnemy(
+        W/2 + Math.cos(angle) * rx,
+        48 + Math.sin(angle) * ry,
+        'medium', diff
+      );
       e.hp += 1;
       enemies.push(e);
     }
-    return enemies;
+
+    // Outer ring — 10 medium enemies (wider ellipse)
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      const rx = 145, ry = 95;
+      const e = makeEnemy(
+        W/2 + Math.cos(angle) * rx,
+        48 + Math.sin(angle) * ry,
+        'medium', diff
+      );
+      e.hp += 1;
+      enemies.push(e);
+    }
+    return enemies;  // 1 + 6 + 10 = 17
   }},
 ];
 
