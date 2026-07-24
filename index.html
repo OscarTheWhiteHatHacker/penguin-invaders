@@ -2047,6 +2047,14 @@ function updateEnemies(dt) {
     // waves 15+ unplayable on medium/hard, especially with FAST modifier).
     const speedWave = game.wave <= 10 ? game.wave : 10 + (game.wave - 10) * 0.30;
     game.enemySpeed = Math.round(diff.bearBaseSpeed + speedWave * diff.waveSpeedBonus);
+
+    // Ensure at least 20 seconds before enemies can reach the floor
+    // (measured from spawn at top of screen, worst-case pattern).
+    const _distToFloor = Math.max(1, FLOOR_Y() - 40);
+    const _dropsNeeded = Math.ceil(_distToFloor / getDropDistance(game.wave));
+    const _maxSpeed = Math.floor((W / 2 + (_dropsNeeded - 1) * W) / 20);
+    game.enemySpeed = Math.min(game.enemySpeed, _maxSpeed);
+
     spawnWave();
     return;
   }
