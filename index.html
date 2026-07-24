@@ -194,6 +194,11 @@
     color: #ffaa00;
   }
 
+  /* ─── Reserve space for touch controls ──────────── */
+  body.touch-device {
+    padding-bottom: 140px;
+  }
+
   /* ─── Responsive: tablets & small screens ───────── */
   @media (max-width: 860px) {
     canvas {
@@ -240,6 +245,9 @@
   }
 
   @media (max-width: 480px) {
+    body.touch-device {
+      padding-bottom: 120px;
+    }
     .game-container {
       padding: 6px;
     }
@@ -697,7 +705,7 @@ const WAVE_PATTERNS = [
         r===0?'huge':'big', diff));
     return enemies;
   }},
-  { name: 'WINGS', speedFactor: 0.7, gen: (diff) => {
+  { name: 'WINGS', speedFactor: 0.175, gen: (diff) => {
     const enemies = [];
     const spacingX=65, spacingY=55, startY=55;
     // Two wings spreading outward from center
@@ -1069,12 +1077,18 @@ function drawPenguin(px, py, flash) {
   ctx.fillStyle = '#ffaa00';
   ctx.fillRect(px - 1, py - 38, 2, 3);
 
+  // Wing waving animation — 75% slower than reference speed
+  const WING_SPEED = 0.25; // 75% slower = 25% speed
+  const wingPhase = Date.now() * 0.001 * WING_SPEED;
+  const wingAngle = Math.sin(wingPhase) * 0.4;
+  const wingYBob = Math.sin(wingPhase) * 3;
+
   ctx.fillStyle = '#1a1a2e';
   ctx.beginPath();
-  ctx.ellipse(px - 20, py + 5, 5, 12, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(px - 20, py + 5 + wingYBob, 5, 12, -0.2 + wingAngle, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(px + 20, py + 5, 5, 12, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(px + 20, py + 5 + wingYBob, 5, 12, 0.2 - wingAngle, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -2326,6 +2340,7 @@ requestAnimationFrame(gameLoop);
   const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   if (isTouchDevice) {
     tc.classList.add('active');
+    document.body.classList.add('touch-device');
     // Prevent pull-to-refresh / overscroll on mobile
     document.addEventListener('touchmove', function(e) {
       if (e.target.closest('.game-container') || e.target === canvas) e.preventDefault();
