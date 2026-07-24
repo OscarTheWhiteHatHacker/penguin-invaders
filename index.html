@@ -197,10 +197,6 @@
   /* ─── Reserve space for touch controls ──────────── */
   body.touch-device {
     padding-bottom: 140px;
-    height: 100vh;
-  }
-  body.touch-device canvas {
-    max-height: calc(100vh - 280px);
   }
 
   /* ─── Responsive: tablets & small screens ───────── */
@@ -251,10 +247,6 @@
   @media (max-width: 480px) {
     body.touch-device {
       padding-bottom: 120px;
-      height: 100vh;
-    }
-    body.touch-device canvas {
-      max-height: calc(100vh - 230px);
     }
     .game-container {
       padding: 6px;
@@ -378,7 +370,6 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const W = 800, H = 600;
 let renderScale = 1;
-let bossArenaTime = 0;
 
 // ─── Key State ───────────────────────────────────────────────
 const keys = { left: false, right: false, space: false };
@@ -419,26 +410,6 @@ function getDropDistance(wave) {
 }
 const FLOOR_Y = () => game.player ? game.player.y - 20 : H - 70; // floor line: top of the player
 const GAME_STATES = { MENU:'MENU', PLAYING:'PLAYING', GAME_OVER:'GAME_OVER', PAUSED:'PAUSED' };
-
-// ─── Boss Arena Layout (Arctic Theme) ─────────────────────
-// Rendered by drawBossArena() during all boss waves (wave % 5 === 0).
-// These constants define the arena's visual landmark positions for use
-// by backend/gameplay logic (spawn positions, movement bounds).
-const ARENA = {
-  // Pedestal: ice crystal throne where the boss spawns
-  PEDESTAL:      { x: W / 2, y: 40, spireTop: 18, spireBase: 58, flankX: 26 },
-  // Ice pillars: translucent columns at enemy spawn columns
-  PILLAR_LEFT:   { x: 50, yTop: 85, yBot: 320 },
-  PILLAR_RIGHT:  { x: W - 50, yTop: 85, yBot: 320 },
-  // Side-column spawn positions (enemies march down from top between pillars)
-  SIDE_COL:      { left: 50, right: W - 50, yStart: 110, yEnd: 300, spacing: 38 },
-  // Boss spawn position (centered above pedestal)
-  BOSS_SPAWN:    { x: W / 2, y: 55 },
-  // Ice floor
-  FLOOR_Y:       565,   // visual floor, gameplay floor = FLOOR_Y()
-  // Aurora zone (top of screen, y ≈ 40-100)
-  AURORA_ZONE:   { top: 40, bot: 100 },
-};
 
 const BEAR_SIZES = {
   huge:  { w:55, h:50, hp:3, points:30, colorOffset:10 },
@@ -756,7 +727,7 @@ const BOSS_WAVE_TYPES = [
   // Type 0: Single giant boss + 4 escort minions (classic)
   { name: 'ICE TITAN', gen: (waveNum, diff) => {
     const enemies = [];
-    const boss = createBossEnemy(ARENA.BOSS_SPAWN.x, ARENA.BOSS_SPAWN.y, waveNum, diff);
+    const boss = createBossEnemy(W/2, 70, waveNum, diff);
     boss.w = 70; boss.h = 64;
     enemies.push(boss);
     for (let i=0; i<4; i++) {
@@ -792,7 +763,7 @@ const BOSS_WAVE_TYPES = [
   // enemies than any other boss wave, making it disproportionately hard.
   { name: 'GLACIAL LORD', gen: (waveNum, diff) => {
     const enemies = [];
-    const boss = createBossEnemy(ARENA.BOSS_SPAWN.x, ARENA.BOSS_SPAWN.y, waveNum, diff);
+    const boss = createBossEnemy(W/2, 60, waveNum, diff);
     boss.w = 75; boss.h = 68;
     boss.bossSpeed = Math.floor(boss.bossSpeed * 0.5);
     enemies.push(boss);
@@ -804,48 +775,30 @@ const BOSS_WAVE_TYPES = [
     }
     return enemies;
   }},
-  // Type 3: Imperial Court — emperor boss with royal guard in a ceremonial formation
-  // The emperor sits at center with elite guards flanking, courtiers in a row below,
-  // and a V-formation pointing toward the player — no side-column enemies.
+  // Type 3: Boss rush — boss + waves of smaller enemies on sides
   { name: 'ARCTIC EMPEROR', gen: (waveNum, diff) => {
     const enemies = [];
-    // Emperor boss — largest boss, 30% bonus HP
-    const boss = createBossEnemy(ARENA.BOSS_SPAWN.x, ARENA.BOSS_SPAWN.y, waveNum, diff);
-    boss.w = 75; boss.h = 70;
-    boss.hp = Math.floor(boss.hp * 1.3);
-    boss.maxHp = boss.hp;
+    const boss = createBossEnemy(W/2, 55, waveNum, diff);
+    boss.w = 65; boss.h = 60;
     enemies.push(boss);
-    const cx = ARENA.BOSS_SPAWN.x;
-    // Imperial Guard — 2 elite big enemies flanking the emperor
-    for (const dx of [-100, 100]) {
-      const g = makeEnemy(cx + dx, 120, 'big', diff);
-      g.hp += 2;
-      enemies.push(g);
+    // Side columns of medium enemies
+    for (let r=0; r<6; r++) {
+      enemies.push(makeEnemy(50, 110 + r*38, 'medium', diff));
+      enemies.push(makeEnemy(W-50, 110 + r*38, 'medium', diff));
     }
-    // Courtiers — row of 6 medium enemies
-    for (let i = 0; i < 6; i++) {
-      enemies.push(makeEnemy(cx - 150 + i * 60, 175, 'medium', diff));
-    }
-    // V-formation — 2 medium enemies below the courtiers
-    for (const dx of [-35, 35]) {
-      enemies.push(makeEnemy(cx + dx, 230, 'medium', diff));
-    }
-    // Front scout at the tip of the V
-    enemies.push(makeEnemy(cx, 280, 'medium', diff));
     return enemies;
   }},
   // Type 4: Snow Doom — boss surrounded by a rotating ring of enemies
   { name: 'SNOW DOOM', gen: (waveNum, diff) => {
     const enemies = [];
-    const boss = createBossEnemy(ARENA.BOSS_SPAWN.x, ARENA.BOSS_SPAWN.y, waveNum, diff);
+    const boss = createBossEnemy(W/2, 50, waveNum, diff);
     boss.w = 80; boss.h = 72;
     enemies.push(boss);
     // Ring of enemies around the boss
     for (let i=0; i<8; i++) {
       const angle = (i / 8) * Math.PI * 2;
       const radius = 100;
-      const e = makeEnemy(ARENA.BOSS_SPAWN.x + Math.cos(angle)*radius,
-                          ARENA.BOSS_SPAWN.y + Math.sin(angle)*radius, 'medium', diff);
+      const e = makeEnemy(W/2 + Math.cos(angle)*radius, 50 + Math.sin(angle)*radius, 'medium', diff);
       e.hp += 1;
       enemies.push(e);
     }
@@ -2106,7 +2059,6 @@ function updateEnemies(dt) {
   for (const e of bosses) {
     e.x += e.bossSpeed * e.bossDir * dt;
     if (e.x - e.w / 2 < 30 || e.x + e.w / 2 > W - 30) e.bossDir *= -1;
-    // Boss descends from spawn point to clear the aurora/pedestal zone
     if (e.y < 100) e.y += 10 * dt;
   }
 
@@ -2160,151 +2112,6 @@ function updateEnemies(dt) {
   }
 }
 
-// ─── Boss Arena (Arctic Emperor) ────────────────────────────
-
-function drawBossArena() {
-  const isBossWave = game.wave % 5 === 0 && game.wave > 0;
-  if (!isBossWave && game.state !== GAME_STATES.PAUSED) return;
-
-  bossArenaTime += 0.016;
-  const t = bossArenaTime;
-
-  // ─── 1. Aurora Borealis ──────────────────────────────────
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const auroraColors = [
-    [0, 200, 100],   // green
-    [0, 150, 255],   // cyan
-    [120, 60, 220],  // purple
-  ];
-  for (let layer = 0; layer < 3; layer++) {
-    ctx.globalAlpha = 0.18;
-    ctx.beginPath();
-    const speed = 0.2 + layer * 0.12;
-    for (let x = 0; x <= W; x += 4) {
-      const y = 40 + layer * 18
-        + Math.sin(x * 0.012 + t * speed) * 28
-        + Math.sin(x * 0.025 + t * speed * 0.6) * 14
-        + Math.sin(x * 0.006 + t * speed * 1.4) * 18;
-      if (x === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    const c = auroraColors[layer];
-    ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},0.7)`;
-    ctx.lineWidth = 28 - layer * 7;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // ─── 2. Ice Floor ───────────────────────────────────────
-  const floorY = ARENA.FLOOR_Y;
-  ctx.save();
-  const floorGrad = ctx.createLinearGradient(0, floorY, 0, H);
-  floorGrad.addColorStop(0, 'rgba(100,180,255,0)');
-  floorGrad.addColorStop(0.2, 'rgba(100,180,255,0.10)');
-  floorGrad.addColorStop(1, 'rgba(150,200,255,0.25)');
-  ctx.fillStyle = floorGrad;
-  ctx.fillRect(0, floorY, W, H - floorY);
-  // Wavy ice surface line
-  ctx.beginPath();
-  ctx.strokeStyle = 'rgba(150,210,255,0.25)';
-  ctx.lineWidth = 1.5;
-  for (let x = 0; x <= W; x += 6) {
-    const wy = floorY + Math.sin(x * 0.04 + t * 0.4) * 2.5 + Math.sin(x * 0.08 + t * 0.6) * 1.5;
-    if (x === 0) ctx.moveTo(x, wy);
-    else ctx.lineTo(x, wy);
-  }
-  ctx.stroke();
-  // Frost veins
-  ctx.strokeStyle = 'rgba(200,230,255,0.06)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 10; i++) {
-    const fx = 30 + i * 80 + Math.sin(i * 3.7) * 25;
-    const fy = floorY + 6 + Math.sin(i * 2.3) * 10;
-    ctx.beginPath();
-    ctx.moveTo(fx, fy);
-    let bx = fx, by = fy;
-    for (let j = 0; j < 5; j++) {
-      bx += (Math.random() - 0.5) * 18;
-      by += (Math.random() - 0.5) * 6;
-      ctx.lineTo(bx, by);
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // ─── 3. Ice Pillars at enemy spawn columns ──────────────
-  [ARENA.PILLAR_LEFT, ARENA.PILLAR_RIGHT].forEach(pillar => {
-    ctx.save();
-    const top = pillar.yTop, bot = pillar.yBot;
-    ctx.shadowColor = 'rgba(100,200,255,0.3)';
-    ctx.shadowBlur = 20;
-    ctx.fillStyle = 'rgba(180,220,255,0.10)';
-    ctx.strokeStyle = 'rgba(180,220,255,0.25)';
-    ctx.lineWidth = 1.5;
-    const segCount = 6;
-    for (let i = 0; i < segCount; i++) {
-      const sy = top + (bot - top) * (i / segCount);
-      const sw = 20 * (1 - i * 0.08);
-      ctx.beginPath();
-      ctx.moveTo(pillar.x - sw, sy);
-      ctx.lineTo(pillar.x, sy - 10);
-      ctx.lineTo(pillar.x + sw, sy);
-      ctx.lineTo(pillar.x, sy + 10);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.fillStyle = 'rgba(160,220,255,0.20)';
-    ctx.shadowColor = '#66ddff';
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.moveTo(pillar.x, top - 12);
-    ctx.lineTo(pillar.x - 10, top + 6);
-    ctx.lineTo(pillar.x + 10, top + 6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  });
-
-  // ─── 4. Boss Pedestal — ice crystal throne ──────────────
-  ctx.save();
-  const cx = ARENA.PEDESTAL.x, cy = ARENA.PEDESTAL.y;
-  ctx.shadowColor = 'rgba(68,200,255,0.4)';
-  ctx.shadowBlur = 35;
-  ctx.fillStyle = 'rgba(180,230,255,0.14)';
-  ctx.strokeStyle = 'rgba(180,230,255,0.30)';
-  ctx.lineWidth = 1.5;
-  // Central crystal spire
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - 22);
-  ctx.lineTo(cx - 16, cy + 18);
-  ctx.lineTo(cx, cy + 10);
-  ctx.lineTo(cx + 16, cy + 18);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  // Smaller flanking crystals
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(cx + s * ARENA.PEDESTAL.flankX, cy - 6);
-    ctx.lineTo(cx + s * (ARENA.PEDESTAL.flankX + 10), cy + 14);
-    ctx.lineTo(cx + s * (ARENA.PEDESTAL.flankX - 6), cy + 14);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-  // Glowing core
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = 'rgba(100,220,255,0.12)';
-  ctx.beginPath();
-  ctx.arc(cx, cy + 8, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
 // ─── Render ──────────────────────────────────────────────────
 
 function render() {
@@ -2323,9 +2130,6 @@ function render() {
   bgGrad.addColorStop(1, '#080820');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
-
-  // Boss arena arctic decorations
-  drawBossArena();
 
   // Screen shake
   if (game.screenShake > 0) {
