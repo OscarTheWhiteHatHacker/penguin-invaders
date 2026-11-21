@@ -2,8 +2,6 @@
 
 A Space Invaders–style arcade shooter. You're a penguin defending the ice shelf from waves of invading polar bears — with chiptune music, boss fights, power-ups and a combo system.
 
-![Penguin Invaders](cover.png)
-
 ## Play
 
 **[▶ Play in your browser](https://oscarthewhitehathacker.github.io/penguin-invaders/)** — or just open `index.html` locally. No build step, no dependencies.
